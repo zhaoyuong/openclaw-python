@@ -1,0 +1,64 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "clawdbot"
+version = "0.1.0"
+description = "Personal AI assistant platform - Python implementation"
+authors = ["ClawdBot Contributors"]
+readme = "README.md"
+packages = [{include = "clawdbot"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+# Core
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+websockets = "^12.0"
+pydantic = "^2.5.0"
+pydantic-settings = "^2.1.0"
+typer = {extras = ["all"], version = "^0.9.0"}
+rich = "^13.7.0"
+# LLM
+anthropic = "^0.18.0"
+openai = "^1.12.0"
+# Channels
+python-telegram-bot = "^21.0"
+discord-py = "^2.3.0"
+slack-sdk = "^3.27.0"
+# Tools
+playwright = "^1.41.0"
+httpx = "^0.27.0"
+# Storage
+lancedb = "^0.5.0"
+aiosqlite = "^0.19.0"
+# Utils
+pyyaml = "^6.0"
+pyjson5 = "^1.6.0"
+python-dotenv = "^1.0.0"
+aiofiles = "^23.2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+black = "^24.0.0"
+ruff = "^0.2.0"
+mypy = "^1.8.0"
+
+[tool.poetry.scripts]
+clawdbot = "clawdbot.cli.main:app"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

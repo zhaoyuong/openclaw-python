@@ -1,0 +1,9 @@
+{
+  "id": "memory-lancedb",
+  "name": "LanceDB Memory",
+  "version": "1.0.0",
+  "description": "Vector memory using LanceDB",
+  "author": "ClawdBot",
+  "main": "plugin.py",
+  "requires": ["lancedb>=0.5"]
+}

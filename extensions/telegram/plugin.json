@@ -1,0 +1,9 @@
+{
+  "id": "telegram",
+  "name": "Telegram Channel",
+  "version": "1.0.0",
+  "description": "Telegram bot integration",
+  "author": "ClawdBot",
+  "main": "plugin.py",
+  "requires": ["python-telegram-bot>=21.0"]
+}

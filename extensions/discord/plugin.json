@@ -1,0 +1,9 @@
+{
+  "id": "discord",
+  "name": "Discord Channel",
+  "version": "1.0.0",
+  "description": "Discord bot integration",
+  "author": "ClawdBot",
+  "main": "plugin.py",
+  "requires": ["discord.py>=2.3"]
+}

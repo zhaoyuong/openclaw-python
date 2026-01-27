@@ -1,0 +1,9 @@
+{
+  "id": "whatsapp",
+  "name": "WhatsApp Channel",
+  "version": "1.0.0",
+  "description": "WhatsApp integration",
+  "author": "ClawdBot",
+  "main": "plugin.py",
+  "requires": []
+}

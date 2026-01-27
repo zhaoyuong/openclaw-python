@@ -1,0 +1,9 @@
+{
+  "id": "slack",
+  "name": "Slack Channel",
+  "version": "1.0.0",
+  "description": "Slack bot integration",
+  "author": "ClawdBot",
+  "main": "plugin.py",
+  "requires": ["slack-sdk>=3.27", "slack-bolt"]
+}

@@ -1,0 +1,1 @@
+"""Gateway WebSocket server implementation"""
