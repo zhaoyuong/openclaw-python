@@ -11,19 +11,21 @@ A production-ready Python implementation of OpenClaw, the personal AI assistant 
 
 ## 🌟 What's New in v0.6.0
 
-### 🚀 Gemini 3 Flash Preview Support
-- ✅ **New Google AI API**: Using `google-genai` package
-- ✅ **Gemini 3 Models**: Flash & Pro with Thinking Mode
-- ✅ **Google Search**: Built-in search integration
-- ✅ **1M+ Context**: Extended context windows
+### 🤖 Multi-Provider LLM Support
+- ✅ **Anthropic Claude** - Opus, Sonnet, Haiku (recommended)
+- ✅ **OpenAI GPT** - GPT-4, GPT-4 Turbo, GPT-3.5
+- ✅ **Google Gemini** - Gemini 3 Flash/Pro with Thinking Mode
+- ✅ **Ollama** - Local, free, private (llama3.2, mistral, etc)
+- ✅ **AWS Bedrock** - Enterprise-grade
 
-### ⚡ v0.6.0 Features
+### ⚡ Enterprise Features
 - **Settings Manager**: Workspace-specific configuration
 - **Message Summarization**: LLM-driven context compression  
 - **Enhanced Tool Policies**: Fine-grained security control
-- **WebSocket Improvements**: Production-grade real-time streaming
+- **WebSocket Streaming**: Production-grade real-time
+- **Advanced Features**: Thinking Mode, Auth Rotation, Model Fallback
 
-See [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for full details.
+See [docs/RELEASE_NOTES_v0.6.0.md](docs/RELEASE_NOTES_v0.6.0.md) for full details.
 
 ---
 
