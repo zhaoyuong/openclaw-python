@@ -1,509 +1,562 @@
 # Telegram Bot 连接原理详解
 
-> 详细解释 `examples/10_gateway_telegram_bridge.py` 中 Telegram Bot 是如何连接和工作的
+> 完整解释 OpenClaw 架构中 Telegram Bot、Gateway 和 Agent 的真实关系
 
 ---
 
-## 🎯 核心概念
+## 核心理解
 
-**关键理解：Telegram Bot 不是通过 WebSocket 连接到 Gateway！**
+### 关键事实
 
-它是通过 **Telegram Bot API** 连接到 Telegram 服务器，然后在**同一个 Python 进程内**通过**函数调用**与 Agent Runtime 通信。
+**Telegram Bot 不通过 WebSocket 连接到 Gateway！**
+
+真实架构：
+- Telegram Bot 通过 **HTTP Long Polling** 连接到 Telegram API
+- Bot 通过 **Python 函数调用**（不是网络请求）访问 Agent Runtime
+- Gateway 通过 **生命周期管理** 控制 Bot 的启动和停止
+- Gateway 通过 **WebSocket** 为外部客户端（UI、CLI）提供服务
 
 ---
 
-## 📊 完整连接流程图
+## 完整架构图
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    OpenClaw Server Process                      │
-│                     (Python - 单进程)                            │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  1. IntegratedOpenClawServer.__init__()                 │   │
-│  │     创建所有组件实例                                      │   │
-│  │                                                          │   │
-│  │     self.session_manager = SessionManager()             │   │
-│  │     self.agent_runtime = AgentRuntime()                 │   │
-│  │     self.gateway_server = GatewayServer()               │   │
-│  │     self.telegram_channel = None                        │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  2. server.setup_telegram(bot_token)                    │   │
-│  │     设置 Telegram Channel 插件                           │   │
-│  │                                                          │   │
-│  │     telegram_channel = EnhancedTelegramChannel()        │   │
-│  │                           ↓                              │   │
-│  │     telegram_channel.set_message_handler(               │   │
-│  │         handle_telegram_message  # 设置回调函数          │   │
-│  │     )                                                    │   │
-│  │                           ↓                              │   │
-│  │     await telegram_channel.start({                      │   │
-│  │         "bot_token": bot_token                          │   │
-│  │     })                                                   │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  3. EnhancedTelegramChannel.start()                     │   │
-│  │     启动 Telegram Bot                                    │   │
-│  │                                                          │   │
-│  │     # 创建 python-telegram-bot Application              │   │
-│  │     self._app = Application.builder()                   │   │
-│  │                   .token(bot_token)                      │   │
-│  │                   .build()                               │   │
-│  │                           ↓                              │   │
-│  │     # 添加消息处理器                                     │   │
-│  │     self._app.add_handler(                              │   │
-│  │         MessageHandler(                                 │   │
-│  │             filters.TEXT,                               │   │
-│  │             self._handle_telegram_message  # 内部方法    │   │
-│  │         )                                                │   │
-│  │     )                                                    │   │
-│  │                           ↓                              │   │
-│  │     # 启动 Polling（长轮询）                             │   │
-│  │     await self._app.updater.start_polling()             │   │
-│  │         ↓                                                │   │
-│  │         开始监听 Telegram API                            │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  4. Telegram Bot 持续运行                                │   │
-│  │                                                          │   │
-│  │     while True:                                          │   │
-│  │         # python-telegram-bot 库自动轮询               │   │
-│  │         updates = await telegram_api.getUpdates()       │   │
-│  │                                                          │   │
-│  │         for update in updates:                          │   │
-│  │             if update.message:                          │   │
-│  │                 # 触发消息处理器                        │   │
-│  │                 await self._handle_telegram_message()   │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  5. _handle_telegram_message(update, context)           │   │
-│  │     处理收到的 Telegram 消息                             │   │
-│  │                                                          │   │
-│  │     message = InboundMessage(                           │   │
-│  │         channel_id="telegram",                          │   │
-│  │         text=update.message.text,                       │   │
-│  │         sender_id=str(update.message.from_user.id),     │   │
-│  │         ...                                              │   │
-│  │     )                                                    │   │
-│  │                           ↓                              │   │
-│  │     # 调用用户设置的处理器（函数调用！）                  │   │
-│  │     await self._message_handler(message)                │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                           ↓                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  6. handle_telegram_message(message)                    │   │
-│  │     在 IntegratedOpenClawServer 中定义的回调             │   │
-│  │                                                          │   │
-│  │     session = self.session_manager.get_session(...)     │   │
-│  │                           ↓                              │   │
-│  │     # 函数调用 Agent Runtime（不是网络请求！）           │   │
-│  │     async for event in self.agent_runtime.run_turn(     │   │
-│  │         session, message.text                           │   │
-│  │     ):                                                   │   │
-│  │         response_text += event.data.get("text")         │   │
-│  │                           ↓                              │   │
-│  │     # 发送回复到 Telegram                                │   │
-│  │     await self.telegram_channel.send_text(              │   │
-│  │         message.chat_id,                                │   │
-│  │         response_text                                    │   │
-│  │     )                                                    │   │
-│  │                           ↓                              │   │
-│  │     # 广播到 Gateway 客户端（可选）                      │   │
-│  │     await self.gateway_server.broadcast_event(...)      │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  7. Gateway Server (并行运行)                            │   │
-│  │     同时监听 WebSocket 连接                              │   │
-│  │                                                          │   │
-│  │     gateway_task = asyncio.create_task(                 │   │
-│  │         self.gateway_server.start()                     │   │
-│  │     )                                                    │   │
-│  │                                                          │   │
-│  │     监听 ws://localhost:8765                             │   │
-│  │     等待外部客户端连接                                    │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-              ↑                                    ↓
-              │                                    │
-    ┌─────────┴────────┐              ┌───────────▼────────┐
-    │  Telegram API    │              │  Gateway Clients   │
-    │  (Telegram 服务器)│              │  (iOS/Web/CLI)     │
-    └──────────────────┘              └────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                  OpenClaw Server (单进程)                     │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Gateway Server                          │   │
+│  │                                                      │   │
+│  │  职责1: 生命周期管理                                 │   │
+│  │    gateway.startChannel("telegram")                 │   │
+│  │    gateway.stopChannel("telegram")                  │   │
+│  │                                                      │   │
+│  │  职责2: WebSocket API                               │   │
+│  │    ws://localhost:8765                              │   │
+│  │    处理外部客户端请求                                │   │
+│  │                                                      │   │
+│  │  职责3: 事件广播                                     │   │
+│  │    broadcast("chat", {...})                         │   │
+│  └─────────┬────────────────────────────────────┬──────┘   │
+│            │ 管理                                │ 广播     │
+│            ↓                                     ↓          │
+│  ┌─────────────────┐              ┌──────────────────────┐ │
+│  │ Telegram Bot    │  函数调用    │   Agent Runtime      │ │
+│  │   (Channel)     │ ──────────→  │                      │ │
+│  │                 │ ←──────────  │  - 处理消息          │ │
+│  │ - 轮询 TG API   │  返回响应    │  - 调用 LLM          │ │
+│  │ - 发送消息      │              │  - 生成回复          │ │
+│  └────┬────────────┘              │  - 发送事件          │ │
+│       │                           └──────────────────────┘ │
+└───────┼──────────────────────────────────────────────────────┘
+        │ HTTP                           ↑ 
+        │ Long Polling                   │ 事件
+        ↓                                │
+   ┌─────────────┐                      │
+   │ Telegram API│                      │
+   │   服务器    │                      │
+   └─────────────┘                      │
+        ↑                                │
+        │                                │
+   Telegram 用户                   WebSocket 客户端
+                                  (Control UI, CLI, iOS)
 ```
 
 ---
 
-## 🔍 关键连接点详解
+## 三种通信方式
 
-### 1️⃣ Telegram Bot 连接到 Telegram API
-
-**使用的库**: `python-telegram-bot`
+### 1. Telegram Bot ↔ Telegram API（HTTP）
 
 ```python
-# 第 83 行: 创建 Application
-self._app = Application.builder().token(self._bot_token).build()
-
-# 这会做什么？
-# 1. 使用 bot_token 创建 Bot 实例
-# 2. Bot 会连接到 Telegram API: https://api.telegram.org/bot{token}/
+# python-telegram-bot 库的实现
+async def start_polling():
+    while True:
+        # HTTP GET 请求到 Telegram 服务器
+        response = await fetch(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            params={
+                "offset": last_update_id + 1,
+                "timeout": 30  # 长轮询
+            }
+        )
+        
+        updates = response.json()["result"]
+        
+        for update in updates:
+            # 收到消息，触发处理
+            await handle_message(update)
 ```
 
-**连接方式**: HTTP Long Polling (长轮询)
+**连接类型**：HTTP Long Polling（不是 WebSocket！）
+
+### 2. Telegram Bot ↔ Agent（函数调用）
 
 ```python
-# 第 96-98 行: 启动轮询
-await self._app.updater.start_polling(
-    drop_pending_updates=True,
-    allowed_updates=["message", "edited_message"]
-)
-
-# 底层实现（由 python-telegram-bot 库处理）:
-while True:
-    # 发送 HTTP GET 请求到 Telegram API
-    response = requests.get(
-        f"https://api.telegram.org/bot{token}/getUpdates",
-        params={
-            "offset": last_update_id + 1,
-            "timeout": 30  # 长轮询超时
-        }
-    )
-    
-    updates = response.json()["result"]
-    
-    for update in updates:
-        # 触发消息处理器
-        await handle_message(update)
-```
-
-**关键点**：
-- ✅ 这是 **HTTP 请求**，不是 WebSocket
-- ✅ Telegram API 是**外部服务**，由 Telegram 公司维护
-- ✅ Bot 主动轮询，不是被动接收
-
----
-
-### 2️⃣ 消息处理器注册
-
-```python
-# 第 86-88 行: 添加消息处理器
-self._app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        self._handle_telegram_message  # 内部方法
-    )
-)
-```
-
-**这做了什么？**
-
-```python
-# MessageHandler 是 python-telegram-bot 的回调机制
-class MessageHandler:
-    def __init__(self, filters, callback):
-        self.filters = filters
-        self.callback = callback
-    
-    async def handle(self, update, context):
-        # 检查消息是否匹配过滤器
-        if self.filters.check(update):
-            # 调用回调函数
-            await self.callback(update, context)
-```
-
-**流程**：
-1. Telegram API 返回新消息
-2. `python-telegram-bot` 库遍历所有注册的 handlers
-3. 找到匹配的 handler
-4. 调用回调函数 `_handle_telegram_message()`
-
----
-
-### 3️⃣ 内部消息处理
-
-```python
-# enhanced_telegram.py 第 103-118 行
-async def _handle_telegram_message(self, update: Update, context):
-    """内部处理：将 Telegram 消息转换为标准格式"""
-    
-    # 1. 提取消息信息
-    message = update.message
-    sender = message.from_user
-    
-    # 2. 创建标准化消息对象
-    inbound = InboundMessage(
-        channel_id="telegram",
-        message_id=str(message.message_id),
-        sender_id=str(sender.id),
-        text=message.text,
-        # ...
-    )
-    
-    # 3. 调用用户设置的处理器 - 关键！
-    await self._message_handler(inbound)
-    #     ^^^^^^^^^^^^^^^^^
-    #     这是一个 Python 函数调用，不是网络请求！
-```
-
----
-
-### 4️⃣ 用户处理器 - 连接到 Agent
-
-```python
-# 10_gateway_telegram_bridge.py 第 90-134 行
+# examples/10_gateway_telegram_bridge.py
 async def handle_telegram_message(message: InboundMessage):
-    """用户自定义的消息处理器"""
+    """Bot 收到消息后的处理 - 完全是函数调用"""
     
-    # 1. 获取 session（纯内存/文件操作）
-    session_id = f"telegram-{message.chat_id}"
+    # 1. 获取 session（函数调用，内存/文件操作）
     session = self.session_manager.get_session(session_id)
-    #         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    #         Python 函数调用，返回 Session 对象
     
-    # 2. 调用 Agent Runtime（纯函数调用！）
+    # 2. 调用 Agent（函数调用，同一进程内）
     response_text = ""
-    async for event in self.agent_runtime.run_turn(
+    async for event in self.agent_runtime.run_turn(session, message.text):
         #                  ^^^^^^^^^^^^^^^^^^^
-        #                  Python 方法调用，不是 HTTP/WebSocket 请求！
-        session,
-        message.text
-    ):
+        #                  这是 Python 方法调用！
         if event.type == "assistant":
-            response_text += event.data.get("delta", {}).get("text", "")
+            response_text += event.data.get("text", "")
     
-    # 3. 发送回复到 Telegram（HTTP API 调用）
-    await self.telegram_channel.send_text(
-        #                       ^^^^^^^^^
-        #                       调用 Telegram Bot API
-        message.chat_id,
-        response_text
-    )
+    # 3. 发送回复（HTTP POST 到 Telegram API）
+    await self.telegram_channel.send_text(message.chat_id, response_text)
     
-    # 4. 广播到 Gateway 客户端（可选，WebSocket）
-    await self.gateway_server.broadcast_event(
-        #                      ^^^^^^^^^^^^^^^
-        #                      WebSocket broadcast
-        "chat",
-        {
-            "channel": "telegram",
-            "message": message.text,
-            "response": response_text
-        }
-    )
+    # 4. 广播事件（可选，发送到 Gateway）
+    await self.gateway_server.broadcast_event("chat", {...})
+```
+
+**连接类型**：Python 函数调用（零网络延迟，同一进程内）
+
+### 3. Gateway ↔ 外部客户端（WebSocket）
+
+```python
+# Gateway 提供 WebSocket API
+class GatewayServer:
+    async def handle_connection(self, websocket):
+        """处理外部客户端的 WebSocket 连接"""
+        connection = GatewayConnection(websocket)
+        
+        async for message in websocket:
+            request = json.loads(message)
+            
+            if request["method"] == "agent":
+                # 外部客户端可以通过 Gateway 发送消息
+                result = await self.handle_agent_request(request)
+                await connection.send_response(result)
+```
+
+**连接类型**：WebSocket（为 Control UI、CLI、iOS 应用提供服务）
+
+---
+
+## Gateway 的三个职责
+
+### 职责 1：Channel 生命周期管理
+
+Gateway 负责启动和停止 channel 插件（包括 Telegram Bot）。
+
+**TypeScript 实现**（参考）：
+
+```typescript
+// src/gateway/server-channels.ts
+class ChannelManager {
+  async startChannel(channelId: string) {
+    const plugin = getChannelPlugin(channelId);
+    
+    // 调用插件的启动方法
+    await plugin.gateway.startAccount({
+      cfg: this.config,
+      runtime: this.runtime,
+      abortSignal: this.abortSignal
+    });
+  }
+}
+
+// extensions/telegram/src/channel.ts
+export const telegramPlugin = {
+  gateway: {
+    startAccount: async (ctx) => {
+      // Gateway 调用这个方法来启动 Telegram Bot
+      return monitorTelegramProvider({
+        token: ctx.token,
+        config: ctx.cfg,
+        runtime: ctx.runtime
+      });
+    }
+  }
+};
+```
+
+**Python 实现**：
+
+```python
+# examples/10_gateway_telegram_bridge.py
+class IntegratedOpenClawServer:
+    async def setup_telegram(self, bot_token):
+        """Gateway 管理 Telegram Bot 的生命周期"""
+        
+        # 创建 Telegram channel 实例
+        self.telegram_channel = EnhancedTelegramChannel()
+        
+        # 设置消息处理器（连接到 Agent）
+        self.telegram_channel.set_message_handler(
+            self.handle_telegram_message
+        )
+        
+        # 启动 Bot（Gateway 调用）
+        await self.telegram_channel.start({"bot_token": bot_token})
+```
+
+### 职责 2：WebSocket API 服务
+
+Gateway 为外部客户端提供 WebSocket 接口。
+
+**支持的方法**：
+
+```python
+# openclaw/gateway/handlers.py
+@register_handler("agent")
+async def handle_agent(connection, params):
+    """外部客户端通过 Gateway 发送消息"""
+    message = params["message"]
+    session_id = params.get("sessionId", "main")
+    
+    # Gateway 调用 Agent
+    async for event in agent_runtime.run_turn(session, message):
+        # 流式返回结果给客户端
+        await connection.send_event("agent", event)
+
+@register_handler("channels.list")
+async def handle_channels_list(connection, params):
+    """列出所有 channels 的状态"""
+    channels = channel_registry.list_channels()
+    return [{"id": ch.id, "running": ch.is_running()} for ch in channels]
+
+@register_handler("send")
+async def handle_send(connection, params):
+    """通过指定 channel 发送消息"""
+    channel = params["channel"]  # 例如 "telegram"
+    to = params["to"]
+    message = params["message"]
+    
+    # Gateway 调用 channel 的发送方法
+    await channel_registry.send(channel, to, message)
+```
+
+### 职责 3：事件广播
+
+Agent 执行时会发送事件，Gateway 广播给所有连接的客户端。
+
+**事件流程**：
+
+```python
+# 1. Agent 处理消息时发送事件
+async def run_turn(session, message):
+    # 发送开始事件
+    emit_agent_event({
+        "type": "agent.start",
+        "session_id": session.id
+    })
+    
+    # 处理消息
+    response = await llm.process(message)
+    
+    # 发送文本事件
+    emit_agent_event({
+        "type": "agent.text",
+        "text": response
+    })
+    
+    # 发送完成事件
+    emit_agent_event({
+        "type": "agent.done"
+    })
+
+# 2. Gateway 监听这些事件
+class GatewayServer:
+    def __init__(self):
+        # 订阅 Agent 事件
+        agent_event_bus.subscribe(self.broadcast_to_clients)
+    
+    async def broadcast_to_clients(self, event):
+        """广播事件给所有 WebSocket 客户端"""
+        for connection in self.connections:
+            await connection.send_event(event["type"], event)
 ```
 
 ---
 
-## 🔄 完整数据流
+## 完整消息流程
 
-### 用户发送消息
-
-```
-1. 用户在 Telegram 客户端输入: "你好"
-        ↓
-2. Telegram 客户端 → Telegram 服务器
-        ↓
-3. Telegram 服务器存储消息
-        ↓
-4. Python Bot 轮询 getUpdates API
-        ↓
-5. Telegram API 返回: {
-     "message_id": 123,
-     "from": {"id": 456, "name": "User"},
-     "text": "你好"
-   }
-        ↓
-6. python-telegram-bot 库解析
-        ↓
-7. 调用 _handle_telegram_message(update, context)
-        ↓  (函数调用，在同一进程内)
-8. 创建 InboundMessage 对象
-        ↓  (函数调用)
-9. 调用 handle_telegram_message(message)
-        ↓  (函数调用)
-10. session_manager.get_session(session_id)
-        ↓  (函数调用)
-11. agent_runtime.run_turn(session, "你好")
-        ↓  (函数调用 LLM API)
-12. LLM API 返回: "你好！有什么可以帮助你的吗？"
-        ↓  (函数调用)
-13. telegram_channel.send_text(chat_id, response)
-        ↓  (HTTP POST 到 Telegram API)
-14. Telegram API: sendMessage
-        ↓
-15. Telegram 服务器 → 用户客户端
-        ↓
-16. 用户看到回复
-```
-
-### 并行：Gateway 广播（可选）
+### 用户发送 "你好"
 
 ```
-13. gateway_server.broadcast_event(...)
-        ↓  (WebSocket)
-所有连接的 Gateway 客户端收到事件:
-{
-  "type": "event",
-  "event": "chat",
-  "payload": {
-    "channel": "telegram",
-    "message": "你好",
-    "response": "你好！..."
+1. 用户在 Telegram 客户端输入 "你好"
+        ↓
+   【Telegram 网络】
+        ↓
+2. Telegram 客户端 → Telegram API 服务器（HTTPS）
+        ↓
+3. Telegram API 存储消息
+        ↓
+   【OpenClaw Server 进程内】
+        ↓
+4. Telegram Bot 轮询：HTTP GET /getUpdates
+   python-telegram-bot 库自动执行
+        ↓
+5. Bot 收到更新，解析消息
+        ↓
+6. 触发内部处理器：_handle_telegram_message(update)
+        ↓
+7. 创建 InboundMessage 对象
+        ↓
+8. 调用用户设置的处理器（函数调用！）
+   handle_telegram_message(message)
+        ↓
+9. 获取 session（函数调用）
+   session = session_manager.get_session(session_id)
+        ↓
+10. 调用 Agent Runtime（函数调用！）
+    async for event in agent_runtime.run_turn(session, "你好"):
+        ↓
+    【调用 LLM API - 网络请求】
+        ↓
+11. Claude/GPT API 返回：
+    "你好！有什么可以帮助你的吗？"
+        ↓
+12. Agent 返回响应（函数返回）
+        ↓
+13. Bot 发送回复（HTTP POST）
+    await telegram_channel.send_text(chat_id, response)
+        ↓
+   【Telegram 网络】
+        ↓
+14. Telegram API → 用户客户端
+        ↓
+15. 用户看到回复
+
+【并行：事件广播】
+12b. Agent 发送事件到 Gateway
+        ↓
+13b. Gateway 广播给所有 WebSocket 客户端
+     {
+       "type": "event",
+       "event": "chat",
+       "payload": {
+         "channel": "telegram",
+         "message": "你好",
+         "response": "你好！..."
+       }
+     }
+        ↓
+14b. Control UI / CLI 收到实时更新
+```
+
+---
+
+## 配对机制（Pairing）
+
+**重要澄清：不是设备配对，是用户授权！**
+
+### 作用
+
+控制哪些用户可以通过 DM（私聊）使用 Bot。
+
+### 流程
+
+```
+1. 新用户向 Bot 发送私聊消息
+        ↓
+2. Bot 检查 dmPolicy 配置
+   if dmPolicy == "pairing" and user not in allowlist:
+        ↓
+3. Bot 生成配对码（例如：ABC123）
+        ↓
+4. Bot 发送消息给用户：
+   "请将配对码 ABC123 发送给管理员以获得授权"
+        ↓
+5. 用户联系管理员，提供配对码
+        ↓
+6. 管理员在服务器执行：
+   openclaw pairing approve telegram ABC123
+        ↓
+7. 用户被添加到 allowlist
+        ↓
+8. 用户可以正常使用 Bot
+```
+
+### TypeScript 实现参考
+
+```typescript
+// src/telegram/pairing-store.ts
+export function upsertTelegramPairingRequest(
+  userId: string,
+  code: string
+) {
+  // 生成配对请求
+  pairingStore.set(code, {
+    userId,
+    channelId: "telegram",
+    createdAt: Date.now()
+  });
+}
+
+export function approveTelegramPairingCode(code: string) {
+  const request = pairingStore.get(code);
+  if (request) {
+    // 添加用户到 allowlist
+    allowlist.add(request.userId);
+    pairingStore.delete(code);
   }
 }
 ```
 
+### Python 实现（可选）
+
+可以在 Python 项目中实现类似机制：
+
+```python
+class PairingManager:
+    def __init__(self):
+        self.pending_requests = {}  # code -> user_id
+        self.allowlist = set()
+    
+    def create_pairing_request(self, user_id: str) -> str:
+        """生成配对码"""
+        code = generate_code()  # 例如：ABC123
+        self.pending_requests[code] = user_id
+        return code
+    
+    def approve_pairing(self, code: str) -> bool:
+        """批准配对"""
+        if code in self.pending_requests:
+            user_id = self.pending_requests[code]
+            self.allowlist.add(user_id)
+            del self.pending_requests[code]
+            return True
+        return False
+```
+
 ---
 
-## ⚠️ 常见误解
+## 常见误解
 
-### ❌ 错误理解 1
+### ❌ 误解 1：Telegram Bot 是 Gateway 的客户端
 
-```
-Telegram Bot → WebSocket → Gateway → Agent
-```
+**错误**：认为 Bot 通过 WebSocket 连接到 Gateway
 
-**错误原因**: Telegram Bot 不通过 WebSocket！
+**正确**：Bot 是服务器端插件，由 Gateway 管理生命周期
 
-### ❌ 错误理解 2
+### ❌ 误解 2：消息通过 Gateway 路由
 
-```
-Telegram Bot 是 Gateway 的客户端
-```
+**错误**：用户消息 → Telegram API → Gateway → Bot → Agent
 
-**错误原因**: Telegram Bot 是服务器端插件！
+**正确**：用户消息 → Telegram API → Bot → Agent（函数调用）
+
+### ❌ 误解 3：Gateway 必须运行才能使用 Telegram Bot
+
+**错误**：认为没有 Gateway，Bot 就无法工作
+
+**正确**：Bot 可以独立运行，Gateway 只是提供管理和监控功能
 
 ### ✅ 正确理解
 
 ```
-进程内:
-  Telegram Bot (插件) ──函数调用──> Agent Runtime
-         ↓ (并行运行)
-  Gateway Server ──WebSocket──> 外部客户端
+进程内关系：
+┌────────────────────────────────────┐
+│  OpenClaw Server                   │
+│                                    │
+│  Gateway ──管理──→ Telegram Bot   │
+│     │                    │         │
+│     │                    │         │
+│     │               函数调用       │
+│     │                    │         │
+│     │                    ↓         │
+│  WebSocket ←──────── Agent         │
+│     ↓                              │
+│  外部客户端                         │
+└────────────────────────────────────┘
 ```
 
 ---
 
-## 🧩 关键组件解析
+## 网络请求 vs 函数调用
 
-### 1. EnhancedTelegramChannel
+### 网络请求（有延迟）
 
 ```python
-class EnhancedTelegramChannel(ChannelPlugin):
-    """Telegram Channel 插件"""
-    
-    def __init__(self):
-        self._app = None  # python-telegram-bot Application
-        self._message_handler = None  # 用户设置的回调
-    
-    async def start(self, config):
-        """启动 Telegram Bot"""
-        # 1. 创建 Bot
-        self._app = Application.builder().token(token).build()
-        
-        # 2. 注册内部处理器
-        self._app.add_handler(
-            MessageHandler(filters.TEXT, self._handle_telegram_message)
-        )
-        
-        # 3. 启动轮询
-        await self._app.updater.start_polling()
-        #     ↑
-        #     开始向 Telegram API 发送 HTTP 请求
-    
-    async def _handle_telegram_message(self, update, context):
-        """内部处理器：转换格式并调用用户回调"""
-        message = InboundMessage(...)
-        
-        # 调用用户设置的处理器
-        await self._message_handler(message)
-        #     ^^^^^^^^^^^^^^^^^^^^
-        #     这是 Python 函数调用！
-    
-    def set_message_handler(self, handler):
-        """设置用户回调"""
-        self._message_handler = handler
+# 1. Telegram Bot → Telegram API
+response = requests.get("https://api.telegram.org/bot.../getUpdates")
+
+# 2. Telegram Bot → Telegram API（发送消息）
+requests.post("https://api.telegram.org/bot.../sendMessage")
+
+# 3. Agent → LLM API
+response = requests.post("https://api.anthropic.com/v1/messages")
+
+# 4. Gateway → WebSocket 客户端
+await websocket.send(json.dumps(event))
 ```
 
-### 2. IntegratedOpenClawServer
+### 函数调用（零延迟）
 
 ```python
-class IntegratedOpenClawServer:
-    """集成服务器"""
-    
-    async def setup_telegram(self, bot_token):
-        """设置 Telegram 插件"""
-        
-        # 1. 创建 channel 实例
-        self.telegram_channel = EnhancedTelegramChannel()
-        
-        # 2. 定义消息处理函数
-        async def handle_telegram_message(message):
-            # 这个函数在收到 Telegram 消息时被调用
-            
-            # 通过函数调用访问 Agent
-            session = self.session_manager.get_session(...)
-            response = await self.agent_runtime.run_turn(...)
-            
-            # 发送回复
-            await self.telegram_channel.send_text(...)
-        
-        # 3. 注册处理函数
-        self.telegram_channel.set_message_handler(
-            handle_telegram_message
-        )
-        
-        # 4. 启动 channel
-        await self.telegram_channel.start({"bot_token": bot_token})
+# 1. Bot → Agent
+async for event in self.agent_runtime.run_turn(session, message):
+    # 同一进程内的方法调用
+
+# 2. Bot → Session Manager
+session = self.session_manager.get_session(session_id)
+# 内存/文件操作
+
+# 3. Bot → Channel Registry
+await self.telegram_channel.send_text(chat_id, text)
+# 调用对象方法
+
+# 4. Gateway → Channel Manager
+await self.channel_registry.get_channel("telegram")
+# 对象访问
 ```
 
 ---
 
-## 🎯 总结
+## 代码位置参考
 
-### Telegram Bot 连接方式
+### TypeScript OpenClaw
 
-1. **到 Telegram 的连接**: HTTP Long Polling
-   - 使用 `python-telegram-bot` 库
-   - 定期轮询 Telegram API
-   - 获取新消息
-
-2. **到 Agent 的连接**: Python 函数调用
-   - 不是网络请求
-   - 在同一个进程内
-   - 通过回调函数传递数据
-
-3. **到 Gateway 的关系**: 并行独立运行
-   - Telegram Bot 不依赖 Gateway
-   - Gateway 可以广播 Telegram 事件
-   - 它们共享 Agent Runtime
-
-### 架构优势
-
-- ✅ **零网络延迟**: Telegram Bot → Agent 是函数调用
-- ✅ **简化部署**: 所有组件在一个进程
-- ✅ **统一管理**: 通过 Gateway 监控所有 channels
-- ✅ **灵活扩展**: 可以添加更多 channel 插件
-
----
-
-## 📝 代码位置参考
-
-| 功能 | 文件 | 行数 |
+| 功能 | 文件 | 说明 |
 |------|------|------|
-| 集成服务器 | `examples/10_gateway_telegram_bridge.py` | 47-186 |
-| Telegram 启动 | `examples/10_gateway_telegram_bridge.py` | 83-143 |
-| 消息处理回调 | `examples/10_gateway_telegram_bridge.py` | 90-134 |
-| Telegram Channel | `openclaw/channels/enhanced_telegram.py` | 19-287 |
-| 内部消息处理 | `openclaw/channels/enhanced_telegram.py` | 103-156 |
-| Channel 基类 | `openclaw/channels/base.py` | 60-230 |
+| Gateway 管理 Channels | `src/gateway/server-channels.ts` | ChannelManager |
+| Telegram 插件注册 | `extensions/telegram/src/channel.ts:390` | gateway.startAccount |
+| Telegram Bot 启动 | `src/telegram/monitor.ts` | monitorTelegramProvider |
+| Agent 事件系统 | `src/infra/agent-events.ts` | emitAgentEvent |
+| Gateway 事件广播 | `src/gateway/server-chat.ts:140` | 监听和广播 |
+| Pairing 存储 | `src/telegram/pairing-store.ts` | 配对管理 |
+| Pairing 逻辑 | `src/telegram/bot-message-context.ts:245` | DM 检查 |
+
+### Python openclaw-python
+
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| 集成服务器 | `examples/10_gateway_telegram_bridge.py:47` | IntegratedOpenClawServer |
+| Telegram 设置 | `examples/10_gateway_telegram_bridge.py:83` | setup_telegram |
+| 消息处理 | `examples/10_gateway_telegram_bridge.py:90` | handle_telegram_message |
+| Telegram Channel | `openclaw/channels/enhanced_telegram.py` | EnhancedTelegramChannel |
+| Gateway Server | `openclaw/gateway/server.py` | GatewayServer |
+| Gateway Handlers | `openclaw/gateway/handlers.py` | 方法处理器 |
 
 ---
 
-**🦞 现在你应该完全理解 Telegram Bot 是如何在集成服务器中工作的了！**
+## 总结
+
+### 核心架构
+
+1. **Telegram Bot 通过 HTTP Long Polling 连接 Telegram API**
+2. **Bot 通过函数调用（不是网络请求）访问 Agent Runtime**
+3. **Gateway 管理 Bot 生命周期，提供 WebSocket API，广播事件**
+
+### Gateway 的三个职责
+
+1. **生命周期管理**：启动/停止 channels
+2. **WebSocket API**：为外部客户端提供接口
+3. **事件广播**：将 Agent 事件广播给所有客户端
+
+### 配对机制
+
+- 用于控制 DM 访问权限
+- 不是设备配对，是用户授权
+- 管理员批准后用户进入 allowlist
+
+---
+
+**现在你应该完全理解 OpenClaw 的真实架构了！** 🎉
