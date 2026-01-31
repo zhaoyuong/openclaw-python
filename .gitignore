@@ -19,56 +19,95 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-# Virtual environments
-venv/
-ENV/
-env/
-.venv
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project specific
-.clawdbot/
-*.log
-
-# Docker & Secrets
-.env
-.env.local
-.env.*.local
-docker-compose.override.yml
-demo-config/
-
-# Test files (keep local only)
-test_*.py
-list_*.py
-.sessions/
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
 
-# Jupyter
-.ipynb_checkpoints
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables (IMPORTANT!)
+.env
+.env.local
+.env.*.local
+
+# Credentials and secrets
+credentials/
+*.pem
+*.key
+*.crt
+*.p12
+
+# Session data
+.sessions/
+sessions/
+*.session
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+test_*.py
+list_*.py
 
 # MyPy
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Pyre
-.pyre/
+# Ruff
+.ruff_cache/
 
-# Archives (过时文档)
+# OpenClaw specific
+workspace/
+.openclaw/
+
+# Documentation - only keep essential docs
+# Keep: README.md, RELEASE_NOTES, core guides
+# Ignore: archive, development docs, detailed guides
 docs/archive/
+docs/development/
+docs/guides/ADVANCED_FEATURES_PLAN.md
+docs/guides/MIGRATION_GUIDE.md
+docs/guides/PRODUCTION_READY.md
+docs/guides/PROJECT_COMPLETION_REPORT.md
+docs/guides/PROJECT_STATUS.md
+docs/guides/RENAME_SUMMARY.md
+docs/testing/TELEGRAM_TEST_SUMMARY.md
+
+# Keep only these essential docs in repo:
+# - docs/README.md
+# - docs/RELEASE_NOTES_*.md
+# - docs/guides/QUICKSTART.md
+# - docs/guides/ADVANCED_FEATURES.md
+# - docs/setup/GEMINI_SETUP_GUIDE.md
