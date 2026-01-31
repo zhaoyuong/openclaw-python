@@ -4,6 +4,19 @@
 
 ---
 
+## ⚠️ 重要区分
+
+**Agent 的功能 vs Gateway 的方法**
+
+- **Agent Runtime** 只有一个核心功能：`run_turn(session, message)` → 调用 LLM，返回响应
+- **Gateway** 提供 85 个方法，其中：
+  - **2 个方法**调用 Agent：`agent`, `chat.send`
+  - **83 个方法**是系统管理：配置、channels、sessions、日志、健康检查等
+
+详见：[AGENT_VS_GATEWAY_METHODS.md](AGENT_VS_GATEWAY_METHODS.md)
+
+---
+
 ## 方法总览
 
 Gateway 提供 **85 个核心方法**，按功能分类如下：
@@ -38,17 +51,21 @@ Gateway 提供 **85 个核心方法**，按功能分类如下：
 
 ### 1. Agent & Chat 方法 (7个)
 
-与 AI Agent 交互和对话的核心方法。
+与 AI Agent 交互和对话的方法。
 
-| 方法 | 说明 | 使用场景 |
-|------|------|----------|
-| `agent` | 调用 Agent 处理消息 | CLI、自定义客户端直接调用 |
-| `agent.wait` | 等待 Agent 任务完成 | 同步等待 Agent 响应 |
-| `agent.identity.get` | 获取 Agent 身份信息 | 获取 Agent 名称、头像等 |
-| `chat.send` | 发送 WebChat 消息 | Control UI 对话功能 |
-| `chat.history` | 获取对话历史 | Control UI 加载历史消息 |
-| `chat.abort` | 中止 Agent 运行 | 停止当前对话 |
-| `send` | 通过指定 channel 发送消息 | 远程发送 Telegram/Discord 消息 |
+| 方法 | 说明 | 是否调用 Agent | 使用场景 |
+|------|------|---------------|----------|
+| `agent` | 调用 Agent 处理消息 | ✅ 是 | CLI、自定义客户端直接调用 |
+| `chat.send` | 发送 WebChat 消息 | ✅ 是 | Control UI 对话功能 |
+| `agent.wait` | 等待 Agent 任务完成 | ⚠️ 间接 | 同步等待 Agent 响应 |
+| `chat.abort` | 中止 Agent 运行 | ⚠️ 控制 | 停止当前对话 |
+| `agent.identity.get` | 获取 Agent 身份信息 | ❌ 否 | 获取 Agent 名称、头像等（只是读配置） |
+| `chat.history` | 获取对话历史 | ❌ 否 | 读取会话文件（不调用 Agent） |
+| `send` | 通过指定 channel 发送消息 | ❌ 否 | 远程发送（通过 Bot 发送，不直接调用 Agent） |
+
+**关键理解**：
+- 只有 `agent` 和 `chat.send` 真正调用 `agent_runtime.run_turn()`
+- 其他方法是辅助功能：获取历史、中止、查询信息等
 
 **示例**：
 
