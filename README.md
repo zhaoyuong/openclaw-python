@@ -45,109 +45,192 @@ See [docs/RELEASE_NOTES_v0.6.0.md](docs/RELEASE_NOTES_v0.6.0.md) for full detail
 
 ---
 
-## 🚀 Quick Start
+## 🚀 快速开始 (Quick Start)
 
-### Step 1: 安装依赖
+### 第一步：安装
 
 ```bash
-# 1. 克隆项目
+# 1. 克隆仓库
 git clone https://github.com/zhaoyuong/openclaw-python.git
 cd openclaw-python
 
-# 2. 安装 uv 包管理器（如果还没安装）
+# 2. 安装 uv 包管理器
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 3. 安装项目依赖
+# 3. 安装依赖
 uv sync
 ```
 
-### Step 2: 配置 API Key
+### 第二步：配置 .env 文件（⚠️ 重要）
 
-**选择一个 LLM Provider**（至少选一个）：
+```bash
+# 复制示例配置文件
+cp .env.example .env
 
-<details>
-<summary><strong>🔹 选项 1: Claude（推荐）</strong></summary>
+# 编辑 .env 文件（使用任意编辑器）
+nano .env   # 或者 vim .env, code .env 等
+```
 
-1. 访问 https://console.anthropic.com/
-2. 注册账号并创建 API Key
-3. 编辑 `.env` 文件：
-   ```bash
-   cp .env.example .env
-   echo 'ANTHROPIC_API_KEY=sk-ant-your-key-here' >> .env
-   ```
-</details>
+**至少配置以下一个 LLM API Key：**
 
-<details>
-<summary><strong>🔹 选项 2: OpenAI GPT</strong></summary>
+```bash
+# ========== LLM API Keys（至少选择一个）==========
 
-1. 访问 https://platform.openai.com/api-keys
-2. 创建 API Key
-3. 编辑 `.env` 文件：
-   ```bash
-   cp .env.example .env
-   echo 'OPENAI_API_KEY=sk-your-key-here' >> .env
-   ```
-</details>
+# 选项 1: Anthropic Claude（推荐，最稳定）
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+# 获取地址: https://console.anthropic.com/
 
-<details>
-<summary><strong>🔹 选项 3: Google Gemini</strong></summary>
+# 选项 2: OpenAI GPT
+OPENAI_API_KEY=sk-your-key-here
+# 获取地址: https://platform.openai.com/api-keys
 
-1. 访问 https://aistudio.google.com/apikey
-2. 创建 API Key
-3. 编辑 `.env` 文件：
-   ```bash
-   cp .env.example .env
-   echo 'GOOGLE_API_KEY=your-key-here' >> .env
-   ```
-</details>
+# 选项 3: Google Gemini（支持 Gemini 3）
+GOOGLE_API_KEY=your-google-api-key
+# 获取地址: https://makersuite.google.com/app/apikey
 
-<details>
-<summary><strong>🔹 选项 4: Ollama（本地免费，无需 API Key）</strong></summary>
+# 选项 4: 本地 Ollama（免费，无需 API Key）
+# 只需安装并启动: ollama serve
 
-1. 安装 Ollama: https://ollama.ai/download
-2. 启动服务：
-   ```bash
-   ollama serve
-   ```
-3. 下载模型：
-   ```bash
-   ollama pull llama3.2
-   ```
-4. 无需配置 `.env`
-</details>
+# ========== Telegram Bot（可选）==========
+# 如果你想通过 Telegram 使用
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+# 获取方式: 
+# 1. 在 Telegram 搜索 @BotFather
+# 2. 发送 /newbot 创建机器人
+# 3. 复制获得的 token
 
-### Step 3: 启动服务
+# ========== 其他设置（可选）==========
+CLAWDBOT_PORT=18789           # API 服务器端口
+CLAWDBOT_LOG_LEVEL=INFO       # 日志级别
+```
 
-**方式 1: 命令行对话（最简单）**
+**⚠️ 安全提醒：**
+- `.env` 文件已在 `.gitignore` 中，不会被提交到 Git
+- 永远不要分享你的 API Keys
+- 生产环境建议使用密钥管理服务
+
+### 第三步：启动服务（3 种方式）
+
+#### 方式 1️⃣：命令行对话（最简单）
 
 ```bash
 # 单次对话
-uv run openclaw agent chat "你好，介绍一下自己"
+uv run openclaw agent chat "你好，请介绍一下自己"
 
 # 指定模型
-uv run openclaw agent chat "帮我写代码" --model anthropic/claude-opus-4-5
+uv run openclaw agent chat "帮我写个 Python 函数" --model anthropic/claude-opus-4-5
 ```
 
-**方式 2: 交互式模式（推荐日常使用）**
+#### 方式 2️⃣：交互式模式（推荐日常使用）⭐
 
 ```bash
 # 启动交互式对话
 uv run openclaw agent interactive
 
-# 多轮对话，输入 'exit' 或 'quit' 退出
+# 然后你可以：
+# - 多轮对话
+# - 输入 /help 查看命令
+# - 输入 /quit 退出
 ```
 
-**方式 3: API 服务器（用于集成）**
+#### 方式 3️⃣：API 服务器（用于集成）
 
 ```bash
 # 启动 REST API 服务
 uv run openclaw api start
 
-# 访问 API 文档: http://localhost:18789/docs
-# 兼容 OpenAI API 格式
+# 服务启动后：
+# - API 文档: http://localhost:18789/docs
+# - Health check: http://localhost:18789/health
+# - 支持 OpenAI 兼容接口
 ```
 
-**方式 4: Python 脚本（高级用法）**
+### 第四步：连接 Telegram（可选）
+
+如果你想通过 Telegram 使用 OpenClaw：
+
+**1. 创建 Telegram Bot**
+```bash
+# 在 Telegram 中搜索并打开 @BotFather
+# 发送以下命令：
+/newbot
+
+# 按照提示：
+# 1. 输入 bot 名称（例如：My OpenClaw Bot）
+# 2. 输入 bot 用户名（必须以 bot 结尾，例如：myopenclaw_bot）
+# 3. 复制获得的 token
+```
+
+**2. 配置 Token**
+```bash
+# 编辑 .env 文件，添加：
+TELEGRAM_BOT_TOKEN=你的token
+
+# 例如：
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+```
+
+**3. 启动 Telegram Bot**
+```bash
+# 使用提供的测试脚本（受限模式，安全）
+uv run python tests/manual/test_telegram_restricted.py
+
+# 或者集成到你的应用中
+```
+
+**4. 在 Telegram 中使用**
+```bash
+# 1. 在 Telegram 搜索你的 bot 用户名
+# 2. 点击 Start 开始对话
+# 3. 直接发送消息即可与 AI 对话
+```
+
+### 使用本地 Ollama（免费方案）
+
+```bash
+# 1. 安装 Ollama（如果还没安装）
+# macOS/Linux:
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 2. 启动 Ollama 服务
+ollama serve
+
+# 3. 下载模型（新终端）
+ollama pull llama3.2
+
+# 4. 使用 OpenClaw（新终端）
+cd openclaw-python
+uv run openclaw agent chat "Hello" --model ollama/llama3.2
+
+# 无需任何 API Key！完全本地运行
+```
+
+---
+
+## 📖 更多文档
+
+- **[START_HERE.md](START_HERE.md)** - 1分钟超快速入门
+- **[QUICK_START.md](QUICK_START.md)** - 5分钟完整指南
+- **[docs/](docs/)** - 完整技术文档
+
+---
+
+## 💻 Usage Examples
+
+### Command-Line Usage
+
+```bash
+# Basic chat
+uv run openclaw agent chat "What is Python?"
+
+# With specific model
+uv run openclaw agent chat "Write a function" --model anthropic/claude-opus-4-5
+
+# Interactive mode (multi-turn conversation)
+uv run openclaw agent interactive
+```
+
+### Python Script
 
 ```python
 import asyncio
@@ -155,22 +238,26 @@ from openclaw.agents import AgentRuntime, Session
 from pathlib import Path
 
 async def main():
+    # Create runtime (choose your provider)
     runtime = AgentRuntime(
-        model="anthropic/claude-opus-4-5",  # 或其他模型
+        model="anthropic/claude-opus-4-5",  # or any model
         max_tokens=2000,
         temperature=0.7
     )
     
+    # Create session
     session = Session(
         session_id="my-chat",
         workspace_dir=Path.cwd()
     )
     
+    # Send message
     response = await runtime.run_turn(
         session=session,
-        user_message="Hello!"
+        user_message="Hello! Introduce yourself."
     )
     
+    # Stream output
     async for event in response:
         if event["type"] == "text":
             print(event["text"], end="", flush=True)
@@ -178,24 +265,16 @@ async def main():
 asyncio.run(main())
 ```
 
-### 📖 完整文档
+### API Server
 
-- **[START_HERE.md](START_HERE.md)** - 1 分钟入门
-- **[QUICK_START.md](QUICK_START.md)** - 详细指南  
-- **[docs/](docs/)** - 完整文档
+```bash
+# Start API server
+uv run openclaw api start
 
----
+# Access API docs at http://localhost:18789/docs
+```
 
-## 🎯 支持的模型
-
-| Provider | 模型示例 | 使用方式 |
-|----------|---------|---------|
-| **Claude** | claude-opus-4-5, claude-sonnet-4-5 | `--model anthropic/claude-opus-4-5` |
-| **OpenAI** | gpt-4, gpt-4-turbo, gpt-3.5-turbo | `--model openai/gpt-4` |
-| **Gemini** | gemini-3-flash-preview, gemini-3-pro-preview | `--model google/gemini-3-flash-preview` |
-| **Ollama** | llama3.2, mistral, codellama | `--model ollama/llama3.2` |
-
-**完整模型列表**: 运行 `uv run openclaw agent models` 查看所有支持的模型
+See [QUICK_START.md](QUICK_START.md) for more examples.
 
 ---
 
