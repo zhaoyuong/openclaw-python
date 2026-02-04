@@ -132,8 +132,10 @@ class TestHealthCheck:
 
         assert await health.readiness() is True
 
-    def test_uptime(self):
+    @pytest.mark.asyncio
+    async def test_uptime(self):
         health = HealthCheck()
+        await asyncio.sleep(0.05) 
         assert health.uptime_seconds > 0
 
 

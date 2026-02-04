@@ -4,6 +4,7 @@ Google Gemini provider implementation using google.genai SDK (NEW API)
 Based on: https://ai.google.dev/gemini-api/docs/quickstart
 """
 
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -27,26 +28,26 @@ logger = logging.getLogger(__name__)
 class GeminiProvider(LLMProvider):
     """
     Google Gemini provider using the NEW google-genai API
-    
+
     Recommended models (2026):
     - gemini-3-flash-preview    # Latest, fastest (RECOMMENDED)
     - gemini-3-pro-preview      # Most capable
     - gemini-2.5-flash          # Stable, fast
     - gemini-2.5-pro            # Stable, powerful
-    
+
     Features:
     - Thinking mode support (HIGH/MEDIUM/LOW)
     - Google Search tool integration
     - Streaming responses
     - Multi-turn conversations
-    
+
     Example:
         provider = GeminiProvider("gemini-3-flash-preview", api_key="...")
-        
+
         async for response in provider.stream(messages):
             if response.type == "text_delta":
                 print(response.content, end="")
-    
+
     API Documentation:
         https://ai.google.dev/gemini-api/docs/models/gemini
     """
@@ -68,7 +69,7 @@ class GeminiProvider(LLMProvider):
                 )
 
             # Use new google.genai Client
-            self._client = genai.Client(api_key=api_key)
+            self._client = genai.Client(api_key=api_key, http_options={"api_version": "v1beta"})
             logger.info(f"Initialized Gemini client with model: {self.model}")
 
         return self._client
@@ -91,9 +92,7 @@ class GeminiProvider(LLMProvider):
             role = "model" if msg.role == "assistant" else "user"
 
             # Create Content object
-            content = types.Content(
-                role=role, parts=[types.Part.from_text(text=msg.content)]
-            )
+            content = types.Content(role=role, parts=[types.Part.from_text(text=msg.content)])
             gemini_contents.append(content)
 
         return gemini_contents, system_instruction
@@ -109,7 +108,7 @@ class GeminiProvider(LLMProvider):
     ) -> AsyncIterator[LLMResponse]:
         """
         Stream responses from Gemini using new API
-        
+
         Args:
             messages: List of conversation messages
             tools: Optional tools/functions (not implemented yet)
@@ -119,42 +118,42 @@ class GeminiProvider(LLMProvider):
             **kwargs: Additional generation parameters
         """
         client = self.get_client()
-        
+
         try:
             # Convert messages
             contents, system_instruction = self._convert_messages(messages)
-            
+
             if not contents:
                 logger.warning("No messages to send to Gemini")
                 return
 
             # Build generation config
             config_params = {}
-            
+
             # Add thinking config if specified
             if thinking_mode:
                 config_params["thinking_config"] = types.ThinkingConfig(
                     thinking_level=thinking_mode.upper()
                 )
-            
+
             # Add tools if specified (e.g., Google Search)
             if tools or kwargs.get("enable_search"):
                 config_params["tools"] = [types.Tool(googleSearch=types.GoogleSearch())]
-            
+
             # Add generation parameters
             if max_tokens:
                 config_params["max_output_tokens"] = max_tokens
             if temperature is not None:
                 config_params["temperature"] = temperature
-            
+
             # Add system instruction if present
             if system_instruction:
                 config_params["system_instruction"] = system_instruction
-            
+
             generate_content_config = types.GenerateContentConfig(**config_params)
 
             # Use streaming generation
-            stream_response = client.models.generate_content_stream(
+            stream_response = await client.aio.models.generate_content_stream(
                 model=self.model,
                 contents=contents,
                 config=generate_content_config,
@@ -162,10 +161,12 @@ class GeminiProvider(LLMProvider):
 
             # Stream chunks
             full_text = []
-            for chunk in stream_response:
+            async for chunk in stream_response:
                 if chunk.text:
                     full_text.append(chunk.text)
                     yield LLMResponse(type="text_delta", content=chunk.text)
+                    # Fix: Allow event loop to process other tasks in Windows
+                    await asyncio.sleep(0.01)  # Yield control to event loop
 
             # Send completion
             complete_text = "".join(full_text)
@@ -179,21 +180,21 @@ class GeminiProvider(LLMProvider):
     def _format_tools_for_gemini(self, tools: list[dict] | None) -> list[types.Tool] | None:
         """
         Format tools for Gemini function calling
-        
+
         Note: Currently only Google Search is supported.
         Custom function calling will be added in future updates.
         """
         if not tools:
             return None
-        
+
         # For now, only support Google Search
         # Custom tools will be added when Gemini API supports them
         gemini_tools = []
-        
+
         for tool in tools:
             if tool.get("type") == "google_search":
                 gemini_tools.append(types.Tool(googleSearch=types.GoogleSearch()))
-        
+
         return gemini_tools if gemini_tools else None
 
 

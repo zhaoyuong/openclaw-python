@@ -138,153 +138,153 @@ class ChannelPlugin(ABC):
     # =========================================================================
     # Lifecycle Hooks (Template Method Pattern)
     # =========================================================================
-    
+
     async def on_init(self) -> None:
         """
         Called before start() - initialize resources
-        
+
         Override this for custom initialization logic.
         Default: no-op
         """
         pass
-    
+
     async def on_start(self, config: dict[str, Any]) -> None:
         """
         Called during start() - connect to platform
-        
+
         Override this to implement platform connection logic.
         This is where you should connect to Telegram API, Discord Gateway, etc.
-        
+
         Args:
             config: Channel configuration
         """
         pass
-    
+
     async def on_ready(self) -> None:
         """
         Called after start() completes - channel is ready
-        
+
         Override this for post-connection setup (e.g., register commands).
         Default: no-op
         """
         pass
-    
+
     async def on_stop(self) -> None:
         """
         Called during stop() - disconnect from platform
-        
+
         Override this to implement platform disconnection logic.
         Default: no-op
         """
         pass
-    
+
     async def on_destroy(self) -> None:
         """
         Called after stop() - cleanup resources
-        
+
         Override this for final cleanup (e.g., close files, connections).
         Default: no-op
         """
         pass
-    
+
     # =========================================================================
     # Message Hooks
     # =========================================================================
-    
+
     async def on_message_received(self, message: InboundMessage) -> InboundMessage | None:
         """
         Called before processing inbound message - can filter/modify
-        
+
         Override this to filter or modify messages before they're processed.
         Return None to skip processing this message.
-        
+
         Args:
             message: Inbound message
-        
+
         Returns:
             Modified message or None to skip
-        
+
         Default: returns message unchanged
         """
         return message
-    
+
     async def on_message_sent(self, message: OutboundMessage, message_id: str) -> None:
         """
         Called after sending outbound message
-        
+
         Override this for post-send actions (e.g., logging, analytics).
-        
+
         Args:
             message: Outbound message that was sent
             message_id: Platform message ID
-        
+
         Default: no-op
         """
         pass
-    
+
     # =========================================================================
     # Error Hooks
     # =========================================================================
-    
+
     async def on_error(self, error: Exception) -> None:
         """
         Called when an error occurs
-        
+
         Override this for custom error handling.
-        
+
         Args:
             error: Exception that occurred
-        
+
         Default: logs the error
         """
         logger.error(f"[{self.id}] Error: {error}", exc_info=True)
-    
+
     async def on_connection_lost(self) -> None:
         """
         Called when connection is lost
-        
+
         Override this to handle connection loss (e.g., trigger reconnection).
         Default: logs warning
         """
         logger.warning(f"[{self.id}] Connection lost")
-    
+
     # =========================================================================
     # Health Check
     # =========================================================================
-    
+
     async def check_health(self) -> tuple[bool, str]:
         """
         Perform health check
-        
+
         Override this for custom health check logic.
-        
+
         Returns:
             (is_healthy, reason)
-        
+
         Default: checks if running
         """
         if not self._running:
             return False, "Channel not running"
-        
+
         if not self.is_connected():
             return False, "Not connected"
-        
+
         return True, "OK"
-    
+
     # =========================================================================
     # Template Methods (final - don't override these)
     # =========================================================================
-    
+
     async def start(self, config: dict[str, Any]) -> None:
         """
         Start the channel (Template Method)
-        
+
         This calls the lifecycle hooks in order:
         1. on_init()
         2. on_start(config)
         3. set running flag
         4. on_ready()
-        
+
         Don't override this - override the hooks instead.
         """
         try:
@@ -296,16 +296,16 @@ class ChannelPlugin(ABC):
         except Exception as e:
             await self.on_error(e)
             raise
-    
+
     async def stop(self) -> None:
         """
         Stop the channel (Template Method)
-        
+
         This calls the lifecycle hooks in order:
         1. on_stop()
         2. clear running flag
         3. on_destroy()
-        
+
         Don't override this - override the hooks instead.
         """
         try:
@@ -316,11 +316,11 @@ class ChannelPlugin(ABC):
         except Exception as e:
             await self.on_error(e)
             raise
-    
+
     # =========================================================================
     # Abstract Methods (must be implemented by subclasses)
     # =========================================================================
-    
+
     @abstractmethod
     async def send_text(self, target: str, text: str, reply_to: str | None = None) -> str:
         """Send text message. Returns message ID."""

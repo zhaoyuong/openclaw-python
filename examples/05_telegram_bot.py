@@ -15,6 +15,8 @@ Prerequisites:
 
 import asyncio
 import os
+from dotenv import load_dotenv  
+load_dotenv()  # Load .env file if present 
 from pathlib import Path
 
 from openclaw.agents.runtime import AgentRuntime
@@ -49,13 +51,14 @@ async def main():
 
     # Create components
     runtime = AgentRuntime(
-        model="anthropic/claude-opus-4", enable_context_management=True, max_retries=3
+        model="google/gemini-2.5-flash", enable_context_management=True, max_retries=3
     )
 
     session_manager = SessionManager(workspace)
 
     # Create Telegram channel
     telegram = EnhancedTelegramChannel()
+    runtime.add_event_listener(telegram.on_event)
 
     # Message handler
     async def handle_message(message: InboundMessage):

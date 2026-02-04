@@ -5,7 +5,6 @@ Enhanced Agent runtime with multi-provider support
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
 
 from ..events import Event, EventType
 from .auth import AuthProfile, ProfileStore, RotationManager
@@ -162,17 +161,17 @@ class MultiProviderRuntime:
     def add_event_listener(self, listener):
         """
         Register an event listener (observer pattern)
-        
+
         The listener will be called for every AgentEvent produced during run_turn.
         This allows components like Gateway to observe agent events without direct coupling.
-        
+
         Args:
             listener: Callable that accepts AgentEvent. Can be sync or async.
-        
+
         Example:
             async def on_agent_event(event: AgentEvent):
                 print(f"Agent event: {event.type}")
-            
+
             agent_runtime.add_event_listener(on_agent_event)
         """
         self.event_listeners.append(listener)
@@ -330,7 +329,7 @@ class MultiProviderRuntime:
             type=EventType.AGENT_STARTED,
             source="agent-runtime",
             session_id=session.session_id if session else None,
-            data={"phase": "start"}
+            data={"phase": "start"},
         )
         await self._notify_observers(event)
         yield event
@@ -401,7 +400,7 @@ class MultiProviderRuntime:
                                     type=EventType.AGENT_TEXT,
                                     source="agent-runtime",
                                     session_id=session.session_id if session else None,
-                                    data={"delta": {"type": "text_delta", "text": content_delta}}
+                                    data={"delta": {"type": "text_delta", "text": content_delta}},
                                 )
                                 await self._notify_observers(event)
                                 yield event
@@ -411,7 +410,7 @@ class MultiProviderRuntime:
                                 type=EventType.AGENT_TEXT,
                                 source="agent-runtime",
                                 session_id=session.session_id if session else None,
-                                data={"delta": {"type": "text_delta", "text": text}}
+                                data={"delta": {"type": "text_delta", "text": text}},
                             )
                             await self._notify_observers(event)
                             yield event
@@ -511,7 +510,7 @@ class MultiProviderRuntime:
                             session.add_assistant_message(final_text, tool_calls)
 
                         # Record success for failover manager
-                        if self.failover_manager:
+                        if self.fallback_manager:
                             self.fallback_manager.record_success(current_model)
 
                         break
@@ -524,7 +523,7 @@ class MultiProviderRuntime:
                     type=EventType.AGENT_TURN_COMPLETE,
                     source="agent-runtime",
                     session_id=session.session_id if session else None,
-                    data={"phase": "end"}
+                    data={"phase": "end"},
                 )
                 await self._notify_observers(event)
                 yield event
@@ -571,7 +570,7 @@ class MultiProviderRuntime:
                     )
                     await self._notify_observers(event)
                     yield event
-                    
+
                     event = AgentEvent("lifecycle", {"phase": "end"})
                     await self._notify_observers(event)
                     yield event
@@ -588,7 +587,7 @@ class MultiProviderRuntime:
                     )
                     await self._notify_observers(event)
                     yield event
-                    
+
                     event = AgentEvent("lifecycle", {"phase": "end"})
                     await self._notify_observers(event)
                     yield event

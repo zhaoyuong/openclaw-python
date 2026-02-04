@@ -16,7 +16,7 @@ class TestAgentRuntime:
     def test_init_default(self):
         """Test runtime initialization with defaults"""
         runtime = AgentRuntime()
-        assert runtime.model_str == "anthropic/claude-opus-4-5-20250514"
+        assert runtime.model_str == "google/gemini-1.5-flash"
         assert runtime.api_key is None
 
     def test_init_custom(self):
@@ -69,7 +69,7 @@ class TestAgentEvent:
 
     def test_event_creation(self):
         """Test creating an event"""
-        event = AgentEvent("test", {"key": "value"})
+        event = AgentEvent("test", "test-source",{"key": "value"})
         assert event.type == "test"
         assert event.data == {"key": "value"}
 

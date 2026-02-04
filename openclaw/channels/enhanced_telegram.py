@@ -40,6 +40,10 @@ class EnhancedTelegramChannel(ChannelPlugin):
         self._bot_token: str | None = None
         self._polling_task: asyncio.Task | None = None
 
+        self._streaming_states = (
+            {}
+        )  # Reacord {session_id: {"msg_id": xxx, "full_content": yyy}}
+
         # Setup connection manager with reconnection
         self._setup_connection_manager(
             reconnect_config=ReconnectConfig(
@@ -243,6 +247,8 @@ class EnhancedTelegramChannel(ChannelPlugin):
         chat = message.chat
         sender = message.from_user
 
+        self._last_chat_id = str(chat.id)  # Record the last chat ID for streaming
+
         # Determine chat type
         chat_type = "direct"
         if chat.type in ("group", "supergroup"):
@@ -271,6 +277,43 @@ class EnhancedTelegramChannel(ChannelPlugin):
 
         # Pass to handler (with metrics tracking)
         await self._handle_message(inbound)
+
+    # [NEW] Deal with streaming text updates
+    async def on_event(self, event: Any) -> None:
+        # ensure the text delta event
+        if str(event.type).lower() != "eventtype.agent_text":
+            if str(event.type).lower() == "eventtype.agent_turn_complete":
+                # done with this session, clean up state
+                self._streaming_states.pop(event.session_id, None)
+            return
+
+        text = event.data.get("delta", {}).get("text", "")
+        session_id = event.session_id
+
+        if not text or not hasattr(self, "_last_chat_id"):
+            return
+
+        # Check if we have an existing message to edit
+        if session_id not in self._streaming_states:
+            # 1. No existing message, send a new one
+            msg_id = await self.send_text(self._last_chat_id, text)
+            # 2. Record the message ID and full content
+            self._streaming_states[session_id] = {"msg_id": msg_id, "full_content": text}
+        else:
+            # 3. Existing message, append text and edit
+            state = self._streaming_states[session_id]
+            state["full_content"] += text
+
+            try:
+                await self._app.bot.edit_message_text(
+                    chat_id=int(self._last_chat_id),
+                    message_id=int(state["msg_id"]),
+                    text=state["full_content"],
+                )
+            except Exception as e:
+                # Log but ignore edit errors
+                if "Message is not modified" not in str(e):
+                    logger.warning(f"Fail to edit message: {e}")
 
     async def _handle_error(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle Telegram errors"""

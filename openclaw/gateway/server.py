@@ -31,11 +31,11 @@ import websockets
 from websockets.server import WebSocketServerProtocol
 
 from ..config import ClawdbotConfig
-from ..events import Event, EventType
+from ..events import Event
+from .channel_manager import ChannelManager, discover_channel_plugins
 from .handlers import get_method_handler
 from .protocol import ErrorShape, EventFrame, RequestFrame, ResponseFrame
 from .protocol.frames import ConnectRequest, HelloResponse
-from .channel_manager import ChannelManager, discover_channel_plugins
 
 logger = logging.getLogger(__name__)
 
@@ -158,26 +158,26 @@ class GatewayConnection:
 class GatewayServer:
     """
     Gateway WebSocket server
-    
+
     This is the main entry point for OpenClaw Gateway, providing:
     1. ChannelManager - Manages all channel plugins (Telegram, Discord, etc.)
     2. WebSocket API - Serves external clients (UI, CLI, mobile)
     3. Event Broadcasting - Broadcasts Agent events to all clients
-    
+
     Architecture follows TypeScript OpenClaw design:
     - Gateway contains ChannelManager
     - Channels are plugins inside Gateway (not external clients)
     - Gateway observes Agent Runtime for events
     - WebSocket is for external clients only
-    
+
     Example:
         config = ClawdbotConfig(...)
         gateway = GatewayServer(config, agent_runtime, session_manager)
-        
+
         # Register channels
         gateway.channel_manager.register("telegram", EnhancedTelegramChannel)
         gateway.channel_manager.configure("telegram", {"bot_token": "..."})
-        
+
         # Start gateway (starts WebSocket + all enabled channels)
         await gateway.start()
     """
@@ -191,7 +191,7 @@ class GatewayServer:
     ):
         """
         Initialize Gateway Server
-        
+
         Args:
             config: Gateway configuration
             agent_runtime: AgentRuntime instance (shared with channels)
@@ -203,34 +203,34 @@ class GatewayServer:
         self.running = False
         self.agent_runtime = agent_runtime
         self.session_manager = session_manager
-        
+
         # Create ChannelManager
         self.channel_manager = ChannelManager(
             default_runtime=agent_runtime,
             session_manager=session_manager,
         )
-        
+
         # Register as observer if agent_runtime provided
         if agent_runtime:
             agent_runtime.add_event_listener(self.on_agent_event)
             logger.info("Gateway registered as Agent Runtime observer")
-        
+
         # Listen for channel events to broadcast
         self.channel_manager.add_event_listener(self._on_channel_event)
-        
+
         # Auto-discover channel plugins if requested
         if auto_discover_channels:
             self._discover_and_register_channels()
-        
+
         logger.info("GatewayServer initialized with ChannelManager")
-    
+
     def _discover_and_register_channels(self) -> None:
         """Discover and register available channel plugins"""
         plugins = discover_channel_plugins()
         for channel_id, channel_class in plugins.items():
             self.channel_manager.register(channel_id, channel_class)
         logger.info(f"Auto-discovered {len(plugins)} channel plugins")
-    
+
     async def _on_channel_event(
         self,
         event_type: str,
@@ -239,22 +239,25 @@ class GatewayServer:
     ) -> None:
         """
         Handle channel manager events
-        
+
         Broadcasts channel lifecycle events to WebSocket clients.
         """
-        await self.broadcast_event("channel", {
-            "event": event_type,
-            "channel_id": channel_id,
-            "data": data,
-        })
-    
+        await self.broadcast_event(
+            "channel",
+            {
+                "event": event_type,
+                "channel_id": channel_id,
+                "data": data,
+            },
+        )
+
     async def on_agent_event(self, event: Event):
         """
         Observer callback: Agent Runtime automatically calls this for every event
-        
+
         This implements the Observer Pattern where Gateway passively receives
         events instead of channels actively pushing to Gateway.
-        
+
         Args:
             event: Unified Event from Agent Runtime
         """
@@ -296,7 +299,7 @@ class GatewayServer:
     async def start(self, start_channels: bool = True) -> None:
         """
         Start the Gateway server
-        
+
         Args:
             start_channels: If True, start all enabled channels
         """
@@ -314,7 +317,9 @@ class GatewayServer:
 
         async with websockets.serve(self.handle_connection, host, port):
             logger.info(f"Gateway server running on ws://{host}:{port}")
-            logger.info(f"ChannelManager: {len(self.channel_manager.list_running())} channels running")
+            logger.info(
+                f"ChannelManager: {len(self.channel_manager.list_running())} channels running"
+            )
             # Keep server running
             while self.running:
                 await asyncio.sleep(1)

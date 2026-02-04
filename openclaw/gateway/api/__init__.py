@@ -11,7 +11,7 @@ Features:
 
 Usage:
     from openclaw.gateway.api import MethodRegistry, get_method_registry
-    
+
     registry = get_method_registry()
     method = registry.get("connect")
     result = await method.execute(connection, params)

@@ -101,16 +101,12 @@ async def demo_message_summarization():
     print(f"Tokens: {summarizer.estimate_tokens(summary_compressed)}")
 
     # Strategy 2: Abstract
-    summary_abstract = await summarizer.summarize(
-        messages, strategy=SummarizationStrategy.ABSTRACT
-    )
+    summary_abstract = await summarizer.summarize(messages, strategy=SummarizationStrategy.ABSTRACT)
     print(f"\n✅ ABSTRACT Strategy:")
     print(f"Tokens: {summarizer.estimate_tokens(summary_abstract)}")
 
     # Strategy 3: Dialogue
-    summary_dialogue = await summarizer.summarize(
-        messages, strategy=SummarizationStrategy.DIALOGUE
-    )
+    summary_dialogue = await summarizer.summarize(messages, strategy=SummarizationStrategy.DIALOGUE)
     print(f"\n✅ DIALOGUE Strategy:")
     print(f"Tokens: {summarizer.estimate_tokens(summary_dialogue)}")
 
