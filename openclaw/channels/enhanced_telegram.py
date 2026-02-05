@@ -371,30 +371,30 @@ class EnhancedTelegramChannel(ChannelPlugin):
     async def _handle_start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command"""
         welcome_message = """
-👋 **欢迎使用 OpenClaw AI 助手！**
+👋 **Welcome to OpenClaw AI Assistant!**
 
-我是一个功能强大的 AI 助手，可以帮你完成各种任务。
+I'm a powerful AI assistant that can help you with various tasks.
 
-**✨ 我的能力：**
-• 💻 执行命令行操作
-• 📁 读写文件
-• 🌐 搜索网络信息
-• 🖼️ 分析和生成图片
-• 🎯 40+ 专业技能
+**✨ My Capabilities:**
+• 💻 Execute command-line operations
+• 📁 Read/write files
+• 🌐 Search web information
+• 🖼️ Analyze and generate images
+• 🎯 40+ professional skills
 
-**📝 可用命令：**
-/help - 查看帮助信息
-/status - 查看系统状态
-/reset - 重置对话历史
-/revoke - 清除会话数据
+**📝 Available Commands:**
+/help - View help information
+/status - Check system status
+/reset - Reset conversation history
+/revoke - Clear session data
 
-**🚀 开始使用：**
-直接发送消息或问题，我会尽力帮助你！
+**🚀 Getting Started:**
+Just send me messages or questions, and I'll do my best to help!
 
-例如：
-• "今天天气怎么样？"
-• "帮我查看当前目录的文件"
-• "写一个 Python 脚本"
+Examples:
+• "What's the weather today?"
+• "Help me check files in current directory"
+• "Write a Python script"
 """
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
         logger.info(f"[{self.id}] User {update.effective_user.id} started bot")
@@ -402,45 +402,45 @@ class EnhancedTelegramChannel(ChannelPlugin):
     async def _handle_help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /help command"""
         help_message = """
-📚 **OpenClaw AI 助手 - 帮助文档**
+📚 **OpenClaw AI Assistant - Help Documentation**
 
-**🎯 核心功能：**
+**🎯 Core Features:**
 
-1️⃣ **命令执行**
-   • 可以执行 bash 命令
-   • 查看系统信息、文件列表等
+1️⃣ **Command Execution**
+   • Execute bash commands
+   • View system info, file lists, etc.
 
-2️⃣ **文件操作**
-   • 读取、写入、编辑文件
-   • 代码分析和修改
+2️⃣ **File Operations**
+   • Read, write, edit files
+   • Code analysis and modification
 
-3️⃣ **网络功能**
-   • 搜索网络信息
-   • 获取天气、新闻等
+3️⃣ **Network Features**
+   • Search web information
+   • Get weather, news, etc.
 
-4️⃣ **图片处理**
-   • 分析图片内容
-   • 生成图片（即将支持）
+4️⃣ **Image Processing**
+   • Analyze image content
+   • Generate images (coming soon)
 
-5️⃣ **专业技能**
-   • 编程助手（Python, JS, 等）
-   • 数据分析
-   • 文档处理
-   • 更多...
+5️⃣ **Professional Skills**
+   • Programming assistant (Python, JS, etc.)
+   • Data analysis
+   • Document processing
+   • And more...
 
-**💡 使用技巧：**
-• 直接描述你想做什么
-• 我会自动选择合适的工具
-• 支持多步骤任务
+**💡 Usage Tips:**
+• Directly describe what you want to do
+• I'll automatically select the right tools
+• Support multi-step tasks
 
-**⚙️ 命令列表：**
-/start - 欢迎信息
-/help - 显示此帮助
-/status - 系统状态
-/reset - 重置对话
-/revoke - 清除数据
+**⚙️ Command List:**
+/start - Welcome message
+/help - Show this help
+/status - System status
+/reset - Reset conversation
+/revoke - Clear data
 
-有任何问题，直接问我就好！😊
+Feel free to ask me anything! 😊
 """
         await update.message.reply_text(help_message, parse_mode="Markdown")
         logger.info(f"[{self.id}] User {update.effective_user.id} requested help")
@@ -454,28 +454,28 @@ class EnhancedTelegramChannel(ChannelPlugin):
         session_id = f"{self.id}-{chat_id}"
         
         status_message = f"""
-📊 **系统状态**
+📊 **System Status**
 
-**🤖 Bot 信息：**
-• 状态: ✅ 运行中
-• 频道: {self.id}
-• 模型: Gemini Flash 3
+**🤖 Bot Information:**
+• Status: ✅ Running
+• Channel: {self.id}
+• Model: Gemini Flash 3
 
-**💬 会话信息：**
-• 会话 ID: `{session_id}`
-• 用户 ID: `{update.effective_user.id}`
-• 聊天类型: {update.effective_chat.type}
+**💬 Session Information:**
+• Session ID: `{session_id}`
+• User ID: `{update.effective_user.id}`
+• Chat Type: {update.effective_chat.type}
 
-**⚡ 功能状态：**
-• 工具: ✅ 19个已加载
-• 技能: ✅ 40个可用
-• 记忆: ✅ 持久化启用
-• 上下文: ✅ 自动压缩
+**⚡ Feature Status:**
+• Tools: ✅ 19 loaded
+• Skills: ✅ 40 available
+• Memory: ✅ Persistence enabled
+• Context: ✅ Auto-compaction
 
-**⏰ 时间：**
-• 当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+**⏰ Time:**
+• Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-一切正常运行！🚀
+Everything is running smoothly! 🚀
 """
         await update.message.reply_text(status_message, parse_mode="Markdown")
         logger.info(f"[{self.id}] User {update.effective_user.id} checked status")
@@ -489,12 +489,12 @@ class EnhancedTelegramChannel(ChannelPlugin):
         try:
             if hasattr(self, '_session_manager') and self._session_manager:
                 self._session_manager.delete_session(session_id)
-                message = "✅ **对话已重置**\n\n你的对话历史已被清除，我们可以重新开始！"
+                message = "✅ **Conversation Reset**\n\nYour conversation history has been cleared, we can start fresh!"
             else:
-                message = "✅ **对话已重置**\n\n会话已重新开始。"
+                message = "✅ **Conversation Reset**\n\nSession has been restarted."
         except Exception as e:
             logger.error(f"[{self.id}] Failed to reset session: {e}")
-            message = "⚠️ **重置失败**\n\n无法清除会话数据，但你仍然可以继续对话。"
+            message = "⚠️ **Reset Failed**\n\nUnable to clear session data, but you can still continue the conversation."
         
         await update.message.reply_text(message, parse_mode="Markdown")
         logger.info(f"[{self.id}] User {update.effective_user.id} reset conversation")
@@ -511,27 +511,27 @@ class EnhancedTelegramChannel(ChannelPlugin):
                 logger.info(f"[{self.id}] User {update.effective_user.id} revoked data")
                 
                 message = """
-🗑️ **数据已清除**
+🗑️ **Data Cleared**
 
-已删除以下数据：
-• ✅ 对话历史
-• ✅ 会话状态
-• ✅ 临时缓存
+Deleted data includes:
+• ✅ Conversation history
+• ✅ Session state
+• ✅ Temporary cache
 
-**隐私保护：**
-• 你的数据已从系统中完全移除
-• 不会保留任何对话记录
-• 可以随时重新开始使用
+**Privacy Protection:**
+• Your data has been completely removed from the system
+• No conversation records are kept
+• You can restart anytime
 
-如需重新开始，发送 /start
+To restart, send /start
 """
             else:
-                message = "✅ 数据清除请求已记录。"
+                message = "✅ Data clearance request has been recorded."
                 
             await update.message.reply_text(message, parse_mode="Markdown")
         except Exception as e:
             logger.error(f"[{self.id}] Failed to revoke data: {e}")
             await update.message.reply_text(
-                "⚠️ 数据清除失败，请稍后重试。",
+                "⚠️ Data clearance failed, please try again later.",
                 parse_mode="Markdown"
             )
