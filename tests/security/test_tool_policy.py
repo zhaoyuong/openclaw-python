@@ -1,6 +1,7 @@
 """Tests for tool policy system (matching TS tool-policy.ts)"""
 
 import pytest
+
 from openclaw.security.tool_policy import (
     OWNER_ONLY_TOOL_NAMES,
     TOOL_GROUPS,
@@ -12,11 +13,11 @@ from openclaw.security.tool_policy import (
     ToolProfilePolicy,
     apply_owner_only_tool_policy,
     expand_tool_groups,
+    get_profile_policy,
     is_owner_only_tool_name,
     normalize_tool_list,
     normalize_tool_name,
     resolve_tool_profile_policy,
-    get_profile_policy,
 )
 
 
@@ -60,9 +61,16 @@ class TestNormalizeToolList:
 class TestToolGroups:
     def test_all_groups_present(self):
         expected = [
-            "group:memory", "group:web", "group:fs", "group:runtime",
-            "group:sessions", "group:ui", "group:automation",
-            "group:messaging", "group:nodes", "group:openclaw",
+            "group:memory",
+            "group:web",
+            "group:fs",
+            "group:runtime",
+            "group:sessions",
+            "group:ui",
+            "group:automation",
+            "group:messaging",
+            "group:nodes",
+            "group:openclaw",
         ]
         for group in expected:
             assert group in TOOL_GROUPS, f"Missing group: {group}"
@@ -211,40 +219,48 @@ class TestToolPolicy:
 
 class TestToolPolicyResolver:
     def test_global_deny(self):
-        resolver = ToolPolicyResolver({
-            "tools": {"deny": ["browser"]},
-        })
+        resolver = ToolPolicyResolver(
+            {
+                "tools": {"deny": ["browser"]},
+            }
+        )
         allowed, reason = resolver.is_tool_allowed("browser", "main")
         assert not allowed
         assert "denied" in reason
 
     def test_global_allow(self):
-        resolver = ToolPolicyResolver({
-            "tools": {"allow": ["bash"]},
-        })
+        resolver = ToolPolicyResolver(
+            {
+                "tools": {"allow": ["bash"]},
+            }
+        )
         allowed, _ = resolver.is_tool_allowed("bash", "main")
         assert allowed
 
     def test_agent_specific(self):
-        resolver = ToolPolicyResolver({
-            "agents": {
-                "myagent": {"tools": {"deny": ["web_search"]}},
-            },
-        })
+        resolver = ToolPolicyResolver(
+            {
+                "agents": {
+                    "myagent": {"tools": {"deny": ["web_search"]}},
+                },
+            }
+        )
         allowed, _ = resolver.is_tool_allowed("web_search", "myagent")
         assert not allowed
 
     def test_sandbox_mode(self):
-        resolver = ToolPolicyResolver({
-            "agents": {
-                "defaults": {
-                    "sandbox": {
-                        "mode": "non-main",
-                        "tools": {"allow": ["bash"]},
+        resolver = ToolPolicyResolver(
+            {
+                "agents": {
+                    "defaults": {
+                        "sandbox": {
+                            "mode": "non-main",
+                            "tools": {"allow": ["bash"]},
+                        },
                     },
                 },
-            },
-        })
+            }
+        )
         # Main session: no sandbox
         allowed, _ = resolver.is_tool_allowed("web_search", "agent", is_main_session=True)
         assert allowed

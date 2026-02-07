@@ -43,7 +43,7 @@ async def demo_settings_manager():
     # Override for this workspace
     settings.set("model", "openai/gpt-4")
     settings.set("temperature", 0.9)
-    print(f"\n✅ Updated workspace settings:")
+    print("\n✅ Updated workspace settings:")
     print(f"  - model: {settings.get('model')}")
     print(f"  - temperature: {settings.get('temperature')}")
 
@@ -57,8 +57,8 @@ async def demo_settings_manager():
 
     # Settings Manager for multiple workspaces
     manager = SettingsManager()
-    ws1 = manager.get_workspace_settings(Path("./workspace1"))
-    ws2 = manager.get_workspace_settings(Path("./workspace2"))
+    manager.get_workspace_settings(Path("./workspace1"))
+    manager.get_workspace_settings(Path("./workspace2"))
     print(f"\n✅ Managing {len(manager.list_workspaces())} workspaces")
 
 
@@ -97,26 +97,26 @@ async def demo_message_summarization():
     summary_compressed = await summarizer.summarize(
         messages, strategy=SummarizationStrategy.COMPRESS
     )
-    print(f"\n✅ COMPRESS Strategy:")
+    print("\n✅ COMPRESS Strategy:")
     print(f"Tokens: {summarizer.estimate_tokens(summary_compressed)}")
 
     # Strategy 2: Abstract
     summary_abstract = await summarizer.summarize(messages, strategy=SummarizationStrategy.ABSTRACT)
-    print(f"\n✅ ABSTRACT Strategy:")
+    print("\n✅ ABSTRACT Strategy:")
     print(f"Tokens: {summarizer.estimate_tokens(summary_abstract)}")
 
     # Strategy 3: Dialogue
     summary_dialogue = await summarizer.summarize(messages, strategy=SummarizationStrategy.DIALOGUE)
-    print(f"\n✅ DIALOGUE Strategy:")
+    print("\n✅ DIALOGUE Strategy:")
     print(f"Tokens: {summarizer.estimate_tokens(summary_dialogue)}")
 
     # Incremental summarization
     new_messages = [{"role": "user", "content": "What about rate limiting?"}]
 
-    updated_summary = await summarizer.incremental_summarize(
+    await summarizer.incremental_summarize(
         summary_compressed, new_messages, strategy=SummarizationStrategy.COMPRESS
     )
-    print(f"\n✅ Incremental update completed")
+    print("\n✅ Incremental update completed")
 
 
 async def demo_tool_policies():
@@ -164,7 +164,7 @@ async def demo_tool_policies():
 
     # Show audit log
     audit_log = manager.get_audit_log(limit=3)
-    print(f"\n📋 Audit Log (last 3 entries):")
+    print("\n📋 Audit Log (last 3 entries):")
     for entry in audit_log:
         print(f"  - {entry['tool']}: {entry['decision']} ({entry['policy']})")
 

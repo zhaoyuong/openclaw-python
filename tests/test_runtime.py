@@ -69,7 +69,7 @@ class TestAgentEvent:
 
     def test_event_creation(self):
         """Test creating an event"""
-        event = AgentEvent("test", "test-source",{"key": "value"})
+        event = AgentEvent("test", "test-source", {"key": "value"})
         assert event.type == "test"
         assert event.data == {"key": "value"}
 

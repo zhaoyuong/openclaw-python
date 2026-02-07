@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """
 Enhanced Agent runtime with multi-provider support
 """
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncIterator
 
@@ -23,6 +22,7 @@ from .providers import (
     LLMProvider,
     OllamaProvider,
     OpenAIProvider,
+    VectorEngineProvider,
 )
 from .queuing import QueueManager
 from .session import Session
@@ -74,7 +74,7 @@ class MultiProviderRuntime:
 
     def __init__(
         self,
-        model: str = "anthropic/claude-opus-4-5-20250514",
+        model: str = "google/gemini-1.5-flash",
         api_key: str | None = None,
         base_url: str | None = None,
         max_retries: int = 3,
@@ -187,6 +187,8 @@ class MultiProviderRuntime:
 
     async def _notify_observers(self, event: Event):
         """Notify all registered observers of an event"""
+        # Debug log
+        print(f"🔍 [Runtime Event] Type: {event.type}, Data: {event.data}")
         for listener in self.event_listeners:
             try:
                 if asyncio.iscoroutinefunction(listener):
@@ -228,6 +230,8 @@ class MultiProviderRuntime:
             # OpenAI-compatible with custom base URL
             return OpenAIProvider(**kwargs)
 
+        elif provider_name in ("vectorengine", "ve"):
+            return VectorEngineProvider(**kwargs)
         else:
             # Unknown provider, try OpenAI-compatible
             logger.warning(f"Unknown provider '{provider_name}', trying OpenAI-compatible mode")
@@ -259,8 +263,6 @@ class MultiProviderRuntime:
             message: User message
             tools: Optional list of tools
             max_tokens: Maximum tokens to generate
-            images: Optional list of image URLs
-            system_prompt: Optional system prompt (injected at session start)
 
         Yields:
             AgentEvent objects
@@ -272,14 +274,20 @@ class MultiProviderRuntime:
         if self.queue_manager:
 
             async def queued_execution():
-                async for event in self._run_turn_internal(session, message, tools, max_tokens, images, system_prompt):
+                async for event in self._run_turn_internal(
+                    session, message, tools, max_tokens, images, system_prompt
+                ):
                     yield event
 
             # This is a generator, need to handle differently
-            async for event in self._run_turn_internal(session, message, tools, max_tokens, images, system_prompt):
+            async for event in self._run_turn_internal(
+                session, message, tools, max_tokens, images, system_prompt
+            ):
                 yield event
         else:
-            async for event in self._run_turn_internal(session, message, tools, max_tokens, images, system_prompt):
+            async for event in self._run_turn_internal(
+                session, message, tools, max_tokens, images, system_prompt
+            ):
                 yield event
 
     async def _run_turn_internal(
@@ -296,18 +304,12 @@ class MultiProviderRuntime:
         if system_prompt and len(session.messages) == 0:
             session.add_system_message(system_prompt)
             logger.info(f"✨ System prompt injected ({len(system_prompt)} chars)")
-        
-        # Add user message (with images if provided)
+
+        # Add user message with images support
         if images:
-            # Store images in session metadata for this message
-            session.add_user_message(message)
-            # Add images metadata to the last message
-            if session.messages:
-                last_msg = session.messages[-1]
-                if not hasattr(last_msg, 'images'):
-                    last_msg.images = images
-                else:
-                    last_msg.images = images
+            logger.info(f"📸 Adding user message with {len(images)} image(s)")
+            session.add_user_message(message, images=images)
+            logger.info("✅ User message stored with images in session")
         else:
             session.add_user_message(message)
 
@@ -370,247 +372,272 @@ class MultiProviderRuntime:
                     current_model = self.fallback_manager.get_current_model()
                     logger.info(f"Using model: {current_model}")
 
-                # Convert session messages to LLM format
-                llm_messages = []
-                for msg in session.get_messages():
-                    # Include images if present
-                    msg_images = getattr(msg, 'images', None)
-                    llm_messages.append(LLMMessage(role=msg.role, content=msg.content, images=msg_images))
+                active_loop = True
 
-                # Format tools for provider
-                tools_param = None
-                if tools:
-                    tools_param = [
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "parameters": tool.get_schema(),
-                            },
-                        }
-                        for tool in tools
-                    ]
-
-                # Stream from provider (may need multiple rounds for tool calling)
-                accumulated_text = ""
-                accumulated_thinking = ""
-                tool_calls = []
-                needs_tool_response = False
-
-                async for response in self.provider.stream(
-                    messages=llm_messages, 
-                    tools=tools_param, 
-                    max_tokens=max_tokens,
-                    **self.extra_params  # Pass enable_search and other params
-                ):
-                    if response.type == "text_delta":
-                        text = response.content
-                        accumulated_text += text
-
-                        # Extract thinking if enabled
-                        if self.thinking_mode != ThinkingMode.OFF and self.thinking_extractor:
-                            thinking_delta, content_delta = (
-                                self.thinking_extractor.extract_streaming(text, thinking_state)
-                            )
-
-                            # Stream thinking separately if mode is STREAM
-                            if self.thinking_mode == ThinkingMode.STREAM and thinking_delta:
-                                accumulated_thinking += thinking_delta
-                                event = AgentEvent(
-                                    "thinking",
-                                    {"delta": {"text": thinking_delta}, "mode": "stream"},
-                                )
-                                await self._notify_observers(event)
-                                yield event
-
-                            # Stream content (non-thinking text)
-                            if content_delta:
-                                event = Event(
-                                    type=EventType.AGENT_TEXT,
-                                    source="agent-runtime",
-                                    session_id=session.session_id if session else None,
-                                    data={"delta": {"type": "text_delta", "text": content_delta}},
-                                )
-                                await self._notify_observers(event)
-                                yield event
-                        else:
-                            # No thinking extraction, stream as-is
-                            event = Event(
-                                type=EventType.AGENT_TEXT,
-                                source="agent-runtime",
-                                session_id=session.session_id if session else None,
-                                data={"delta": {"type": "text_delta", "text": text}},
-                            )
-                            await self._notify_observers(event)
-                            yield event
-
-                    elif response.type == "tool_call":
-                        tool_calls = response.tool_calls or []
-
-                        # Execute tools
-                        for tc in tool_calls:
-                            tool = next((t for t in tools if t.name == tc["name"]), None)
-                            if tool:
-                                # Format tool use
-                                formatted_use = self.tool_formatter.format_tool_use(
-                                    tc["name"], tc["arguments"]
-                                )
-
-                                event = AgentEvent(
-                                    "tool_use",
-                                    {
-                                        "tool": tc["name"],
-                                        "input": tc["arguments"],
-                                        "formatted": formatted_use,
-                                    },
-                                )
-                                await self._notify_observers(event)
-                                yield event
-
-                                # Execute tool
-                                try:
-                                    result = await tool.execute(tc["arguments"])
-                                    success = result.success if result else False
-                                    output = result.content if result else "No output"
-
-                                    # Format tool result
-                                    formatted_result = self.tool_formatter.format_tool_result(
-                                        tc["name"], output, success
-                                    )
-
-                                    event = AgentEvent(
-                                        "tool_result",
-                                        {
-                                            "tool": tc["name"],
-                                            "result": output,
-                                            "success": success,
-                                            "formatted": formatted_result,
-                                        },
-                                    )
-                                    await self._notify_observers(event)
-                                    yield event
-
-                                    # Add tool result to session
-                                    session.add_tool_message(
-                                        tool_call_id=tc["id"], content=output, name=tc["name"]
-                                    )
-
-                                except Exception as tool_error:
-                                    error_msg = str(tool_error)
-                                    formatted_error = self.tool_formatter.format_tool_result(
-                                        tc["name"], error_msg, success=False
-                                    )
-
-                                    event = AgentEvent(
-                                        "tool_result",
-                                        {
-                                            "tool": tc["name"],
-                                            "result": error_msg,
-                                            "success": False,
-                                            "error": error_msg,
-                                            "formatted": formatted_error,
-                                        },
-                                    )
-                                    await self._notify_observers(event)
-                                    yield event
-
-                                    session.add_tool_message(
-                                        tool_call_id=tc["id"],
-                                        content=f"Error: {error_msg}",
-                                        name=tc["name"],
-                                    )
-
-                    elif response.type == "done":
-                        # Extract thinking if ON mode
-                        final_text = accumulated_text
-                        if self.thinking_mode == ThinkingMode.ON and self.thinking_extractor:
-                            extracted = self.thinking_extractor.extract(accumulated_text)
-                            if extracted.has_thinking:
-                                # Include thinking in response
-                                event = AgentEvent(
-                                    "thinking", {"content": extracted.thinking, "mode": "on"}
-                                )
-                                await self._notify_observers(event)
-                                yield event
-                                final_text = extracted.content
-
-                        # Save assistant message
-                        if final_text or tool_calls:
-                            session.add_assistant_message(final_text, tool_calls)
-
-                        # If there were tool calls, we need to continue the conversation
-                        # to let the model generate a response based on tool results
-                        if tool_calls:
-                            logger.info(f"Tool calls completed, will request final response from model")
-                            needs_tool_response = True
-                            # Don't break yet - we'll make another API call after this loop
-                        else:
-                            # Record success for failover manager
-                            if self.fallback_manager:
-                                self.fallback_manager.record_success(current_model)
-
-                        break
-
-                    elif response.type == "error":
-                        raise Exception(response.content)
-
-                # If we need to get a response after tool execution, make another API call
-                if needs_tool_response:
-                    logger.info("Making follow-up API call to get response based on tool results")
-                    
-                    # Rebuild messages with tool results
+                while active_loop:
+                    # Convert session messages to LLM format
+                    raw_history = session.get_messages()
                     llm_messages = []
-                    for msg in session.get_messages():
-                        msg_images = getattr(msg, 'images', None)
-                        llm_messages.append(LLMMessage(role=msg.role, content=msg.content, images=msg_images))
-                    
-                    # Add explicit instruction to NOT use tools
-                    # This is a workaround for Gemini's AFC (Automatic Function Calling)
-                    llm_messages.append(LLMMessage(
-                        role="user",
-                        content="Based on the tool results above, please provide a natural language response to the user. Do NOT call any more tools."
-                    ))
-                    
-                    # Reset for second response
+
+                    for msg in raw_history:
+                        role = getattr(msg, "role", "user")
+                        content = getattr(msg, "content", "")
+                        # Preserve images attached to session messages so providers receive multimodal input
+                        images = getattr(msg, "images", None)
+                        new_msg = LLMMessage(role=role, content=content, images=images)
+
+                        raw_calls = getattr(msg, "tool_calls", None)
+                        if raw_calls:
+                            formatted_calls = []
+                            for tc in raw_calls:
+                                # Ensure arguments are string for provider
+                                args = tc.get("arguments", "{}")
+                                if isinstance(args, dict):
+                                    args = json.dumps(
+                                        args
+                                    )  # Convert dict to JSON string for provider
+
+                                formatted_calls.append(
+                                    {
+                                        "id": tc.get("id"),
+                                        "type": "function",
+                                        "function": {"name": tc.get("name"), "arguments": args},
+                                    }
+                                )
+                            new_msg.tool_calls = formatted_calls
+
+                        new_msg.tool_call_id = getattr(msg, "tool_call_id", None)
+                        new_msg.name = getattr(msg, "name", None)
+                        llm_messages.append(new_msg)
+
+                    logger.info(
+                        f"🔄 [Message Merged] Final sequence: {[m.role for m in llm_messages]}"
+                    )
+
+                    # Format tools for provider
+                    tools_param = None
+                    if tools:
+                        tools_param = []
+                        for tool in tools:
+                            # extract schema
+                            p = getattr(tool, "args_schema", getattr(tool, "parameters", {}))
+                            schema = p.model_json_schema() if hasattr(p, "model_json_schema") else p
+
+                            if isinstance(schema, dict):
+                                schema.pop("title", None)
+                                if "parameters" in schema:
+                                    schema = schema["parameters"]
+
+                            tools_param.append(
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool.name,
+                                        "description": tool.description,
+                                        "parameters": schema,
+                                    },
+                                }
+                            )
+
+                    # Stream from provider
+                    # Debug: log provider and images present in messages
+                    try:
+                        provider_name = getattr(
+                            self.provider, "provider_name", type(self.provider).__name__
+                        )
+                    except Exception:
+                        provider_name = type(self.provider).__name__
+
+                    logger.info(f"🛰️ Streaming to provider: {provider_name}")
+                    for idx, lm in enumerate(llm_messages):
+                        imgs = getattr(lm, "images", None)
+                        if imgs:
+                            try:
+                                first = imgs[0] if len(imgs) > 0 else None
+                            except Exception:
+                                first = None
+                            logger.info(
+                                f"📷 LLMMessage[{idx}] role={lm.role} images_count={len(imgs)} first={str(first)[:120]}"
+                            )
+                        else:
+                            logger.info(f"📷 LLMMessage[{idx}] role={lm.role} images_count=0")
+
                     accumulated_text = ""
+                    accumulated_thinking = ""
                     tool_calls = []
-                    
-                    # Stream the final response WITHOUT tools (to prevent infinite loop)
-                    # The model should now generate a text response based on tool results
-                    # IMPORTANT: Pass empty list [] instead of None to truly disable tools
+
+                    has_tool_calls = False
                     async for response in self.provider.stream(
-                        messages=llm_messages, 
-                        tools=[], 
-                        max_tokens=max_tokens,
-                        **self.extra_params  # Pass enable_search and other params
+                        messages=llm_messages, tools=tools_param, max_tokens=max_tokens
                     ):
                         if response.type == "text_delta":
                             text = response.content
                             accumulated_text += text
-                            
-                            # Stream text to user
-                            event = Event(
-                                type=EventType.AGENT_TEXT,
-                                source="agent-runtime",
-                                session_id=session.session_id if session else None,
-                                data={"delta": {"type": "text_delta", "text": text}},
+
+                            # Extract thinking if enabled
+                            if self.thinking_mode != ThinkingMode.OFF and self.thinking_extractor:
+                                thinking_delta, content_delta = (
+                                    self.thinking_extractor.extract_streaming(text, thinking_state)
+                                )
+
+                                # Stream thinking separately if mode is STREAM
+                                if self.thinking_mode == ThinkingMode.STREAM and thinking_delta:
+                                    accumulated_thinking += thinking_delta
+                                    event = AgentEvent(
+                                        "thinking",
+                                        {"delta": {"text": thinking_delta}, "mode": "stream"},
+                                    )
+                                    await self._notify_observers(event)
+                                    yield event
+
+                                # Stream content (non-thinking text)
+                                if content_delta:
+                                    event = Event(
+                                        type=EventType.AGENT_TEXT,
+                                        source="agent-runtime",
+                                        session_id=session.session_id if session else None,
+                                        data={
+                                            "delta": {"type": "text_delta", "text": content_delta}
+                                        },
+                                    )
+                                    await self._notify_observers(event)
+                                    yield event
+                            else:
+                                # No thinking extraction, stream as-is
+                                event = Event(
+                                    type=EventType.AGENT_TEXT,
+                                    source="agent-runtime",
+                                    session_id=session.session_id if session else None,
+                                    data={"delta": {"type": "text_delta", "text": text}},
+                                )
+                                await self._notify_observers(event)
+                                yield event
+
+                        elif response.type == "tool_call":
+                            has_tool_calls = True
+                            tool_calls = response.tool_calls or []
+
+                            session.add_assistant_message(accumulated_text, tool_calls)
+                            accumulated_text = ""
+                            logger.info(
+                                f"🔧 Tool calls received: {[tc['name'] for tc in tool_calls]}"
                             )
-                            await self._notify_observers(event)
-                            yield event
-                            
+
+                            # Execute tools
+                            for tc in tool_calls:
+                                tool = next((t for t in tools if t.name == tc["name"]), None)
+                                if tool:
+                                    # Format tool use
+                                    formatted_use = self.tool_formatter.format_tool_use(
+                                        tc["name"], tc["arguments"]
+                                    )
+
+                                    event = AgentEvent(
+                                        "tool_use",
+                                        {
+                                            "tool": tc["name"],
+                                            "input": tc["arguments"],
+                                            "formatted": formatted_use,
+                                        },
+                                    )
+                                    await self._notify_observers(event)
+                                    yield event
+
+                                    # Execute tool
+                                    try:
+                                        result = await tool.execute(tc["arguments"])
+                                        success = result.success if result else False
+                                        output = result.content if result else "No output"
+                                        logger.info(
+                                            f"✅ Tool {tc['name']} executed with success={success}"
+                                        )
+
+                                        # Format tool result
+                                        formatted_result = self.tool_formatter.format_tool_result(
+                                            tc["name"], output, success
+                                        )
+
+                                        event = AgentEvent(
+                                            "tool_result",
+                                            {
+                                                "tool": tc["name"],
+                                                "result": output,
+                                                "success": success,
+                                                "formatted": formatted_result,
+                                            },
+                                        )
+                                        await self._notify_observers(event)
+                                        yield event
+
+                                        # Add tool result to session
+                                        session.add_tool_message(
+                                            tool_call_id=tc["id"], content=output, name=tc["name"]
+                                        )
+                                        logger.info(
+                                            f"✅ Tool {tc['name']} result saved to session."
+                                        )
+
+                                    except Exception as tool_error:
+                                        error_msg = str(tool_error)
+                                        formatted_error = self.tool_formatter.format_tool_result(
+                                            tc["name"], error_msg, success=False
+                                        )
+
+                                        event = AgentEvent(
+                                            "tool_result",
+                                            {
+                                                "tool": tc["name"],
+                                                "result": error_msg,
+                                                "success": False,
+                                                "error": error_msg,
+                                                "formatted": formatted_error,
+                                            },
+                                        )
+                                        await self._notify_observers(event)
+                                        yield event
+
+                                        session.add_tool_message(
+                                            tool_call_id=tc["id"],
+                                            content=f"Error: {error_msg}",
+                                            name=tc["name"],
+                                        )
+
                         elif response.type == "done":
-                            # Save final response
-                            if accumulated_text:
-                                session.add_assistant_message(accumulated_text, [])
+                            # Extract thinking if ON mode
+                            final_text = accumulated_text
+                            if self.thinking_mode == ThinkingMode.ON and self.thinking_extractor:
+                                extracted = self.thinking_extractor.extract(accumulated_text)
+                                if extracted.has_thinking:
+                                    # Include thinking in response
+                                    event = AgentEvent(
+                                        "thinking", {"content": extracted.thinking, "mode": "on"}
+                                    )
+                                    await self._notify_observers(event)
+                                    yield event
+                                    final_text = extracted.content
+
+                            # Save assistant message
+                            # We dont save it for tool calls because they are saved immediately after execution
+                            if final_text:
+                                session.add_assistant_message(final_text, tool_calls)
+
+                            # Record success for failover manager
+                            if self.fallback_manager:
+                                self.fallback_manager.record_success(current_model)
+
                             break
-                            
+
                         elif response.type == "error":
                             raise Exception(response.content)
-                    
-                    # Record success
-                    if self.fallback_manager:
-                        self.fallback_manager.record_success(current_model)
+
+                    if has_tool_calls:
+                        # Continue loop to check for more tool calls until done
+                        logger.info("🔄 Tools were called. Re-entering loop for model summary.")
+                        active_loop = True
+                    else:
+                        # No tools called, can end turn
+                        logger.info("✅ No more tool calls. Ending agent turn.")
+                        active_loop = False
 
                 # Success, exit retry loop
                 event = Event(

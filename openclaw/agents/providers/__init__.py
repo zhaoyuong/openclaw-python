@@ -8,6 +8,7 @@ from .bedrock_provider import BedrockProvider
 from .gemini_provider import GeminiProvider
 from .ollama_provider import OllamaProvider
 from .openai_provider import OpenAIProvider
+from .vectorengine_provider import VectorEngineProvider
 
 __all__ = [
     "LLMProvider",
@@ -18,4 +19,5 @@ __all__ = [
     "GeminiProvider",
     "BedrockProvider",
     "OllamaProvider",
+    "VectorEngineProvider",
 ]

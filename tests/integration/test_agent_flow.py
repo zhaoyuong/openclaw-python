@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from openclaw.events import EventType
 from openclaw.agents import AgentRuntime, Session, SessionManager
 from openclaw.agents.runtime import AgentEvent
 from openclaw.agents.tools.bash import BashTool
+from openclaw.events import EventType
 
 
 class TestAgentFlow:
@@ -39,12 +39,12 @@ class TestAgentFlow:
 
             response_parts = []
             async for event in runtime.run_turn(session, "Hello"):
-                if event.type == EventType.AGENT_TEXT: 
+                if event.type == EventType.AGENT_TEXT:
                     if "delta" in event.data and "text" in event.data["delta"]:
                         response_parts.append(event.data["delta"]["text"])
 
             response = "".join(response_parts)
-            await asyncio.sleep(0.02) # Ensure all async tasks complete
+            await asyncio.sleep(0.02)  # Ensure all async tasks complete
             assert "Hello" in response or "ClawdBot" in response
             assert len(session.messages) >= 1
 

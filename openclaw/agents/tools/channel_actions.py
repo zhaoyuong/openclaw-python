@@ -28,11 +28,14 @@ class MessageTool(AgentTool):
                 "target": {"type": "string", "description": "Target user/chat ID"},
                 "text": {"type": "string", "description": "Message text or caption for media"},
                 "reply_to": {"type": "string", "description": "Message ID to reply to (optional)"},
-                "media_url": {"type": "string", "description": "URL of media file to send (photo, image, video, etc.) - optional"},
+                "media_url": {
+                    "type": "string",
+                    "description": "URL of media file to send (photo, image, video, etc.) - optional",
+                },
                 "media_type": {
-                    "type": "string", 
+                    "type": "string",
                     "enum": ["photo", "video", "document", "audio"],
-                    "description": "Type of media to send - optional, defaults to 'photo' if media_url is provided"
+                    "description": "Type of media to send - optional, defaults to 'photo' if media_url is provided",
                 },
             },
             "required": ["channel", "target"],
@@ -50,11 +53,13 @@ class MessageTool(AgentTool):
         # Validate required parameters
         if not channel_id or not target:
             return ToolResult(success=False, content="", error="channel and target are required")
-        
+
         # If media_url is provided, text becomes optional (used as caption)
         # If no media_url, text is required
         if not media_url and not text:
-            return ToolResult(success=False, content="", error="Either text or media_url is required")
+            return ToolResult(
+                success=False, content="", error="Either text or media_url is required"
+            )
 
         try:
             channel = self.channel_registry.get(channel_id)
@@ -71,24 +76,24 @@ class MessageTool(AgentTool):
             # Send media if media_url is provided
             if media_url:
                 # Check if channel supports media
-                if not hasattr(channel, 'send_media'):
+                if not hasattr(channel, "send_media"):
                     return ToolResult(
-                        success=False, 
-                        content="", 
-                        error=f"Channel '{channel_id}' does not support sending media"
+                        success=False,
+                        content="",
+                        error=f"Channel '{channel_id}' does not support sending media",
                     )
-                
+
                 message_id = await channel.send_media(target, media_url, media_type, caption=text)
-                
+
                 return ToolResult(
                     success=True,
                     content=f"Media ({media_type}) sent to {channel_id}:{target}",
                     metadata={
-                        "message_id": message_id, 
-                        "channel": channel_id, 
+                        "message_id": message_id,
+                        "channel": channel_id,
                         "target": target,
                         "media_url": media_url,
-                        "media_type": media_type
+                        "media_type": media_type,
                     },
                 )
             else:

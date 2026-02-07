@@ -52,8 +52,8 @@ CORE_TOOL_SUMMARIES: dict[str, str] = {
     "sessions_send": "Send a message to another session/sub-agent",
     "sessions_spawn": "Spawn a sub-agent session",
     "session_status": (
-        'Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); '
-        'use for model-use questions (📊 session_status); optional per-session model override'
+        "Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); "
+        "use for model-use questions (📊 session_status); optional per-session model override"
     ),
     "image": "Analyze an image with the configured image model",
     "tts": "Convert text to speech and save as audio file",
@@ -62,22 +62,41 @@ CORE_TOOL_SUMMARIES: dict[str, str] = {
 
 # Preferred tool display order (matches TypeScript toolOrder)
 TOOL_ORDER: list[str] = [
-    "read_file", "write_file", "edit_file", "apply_patch",
-    "grep", "find", "ls",
-    "bash", "process",
-    "web_search", "web_fetch",
-    "browser", "canvas", "nodes", "cron",
-    "message", "gateway", "agents_list",
-    "telegram_actions", "discord_actions", "slack_actions", "whatsapp_actions",
-    "sessions_list", "sessions_history", "sessions_send", "sessions_spawn",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "apply_patch",
+    "grep",
+    "find",
+    "ls",
+    "bash",
+    "process",
+    "web_search",
+    "web_fetch",
+    "browser",
+    "canvas",
+    "nodes",
+    "cron",
+    "message",
+    "gateway",
+    "agents_list",
+    "telegram_actions",
+    "discord_actions",
+    "slack_actions",
+    "whatsapp_actions",
+    "sessions_list",
+    "sessions_history",
+    "sessions_send",
+    "sessions_spawn",
     "session_status",
-    "image", "tts", "voice_call",
+    "image",
+    "tts",
+    "voice_call",
 ]
 
 
 def build_tooling_section(
-    tool_names: list[str] | None,
-    tool_summaries: dict[str, str] | None = None
+    tool_names: list[str] | None, tool_summaries: dict[str, str] | None = None
 ) -> list[str]:
     """Build the Tooling section (matches TS lines 382-406)."""
     if not tool_names:
@@ -174,9 +193,7 @@ def build_cli_quick_reference_section() -> list[str]:
 
 
 def build_skills_section(
-    skills_prompt: str | None,
-    is_minimal: bool,
-    read_tool_name: str = "read_file"
+    skills_prompt: str | None, is_minimal: bool, read_tool_name: str = "read_file"
 ) -> list[str]:
     """Build the Skills section (matches TS lines 29-37)."""
     if is_minimal:
@@ -201,9 +218,7 @@ def build_skills_section(
 
 
 def build_memory_section(
-    is_minimal: bool,
-    available_tools: set[str],
-    citations_mode: Literal["on", "off"] = "on"
+    is_minimal: bool, available_tools: set[str], citations_mode: Literal["on", "off"] = "on"
 ) -> list[str]:
     """Build the Memory section (matches TS lines 52-65)."""
     if is_minimal:
@@ -234,10 +249,7 @@ def build_memory_section(
     return lines
 
 
-def build_self_update_section(
-    has_gateway: bool,
-    is_minimal: bool
-) -> list[str]:
+def build_self_update_section(has_gateway: bool, is_minimal: bool) -> list[str]:
     """Build the OpenClaw Self-Update section (matches TS lines 426-434)."""
     if not has_gateway or is_minimal:
         return []
@@ -254,10 +266,7 @@ def build_self_update_section(
     ]
 
 
-def build_model_aliases_section(
-    model_alias_lines: list[str] | None,
-    is_minimal: bool
-) -> list[str]:
+def build_model_aliases_section(model_alias_lines: list[str] | None, is_minimal: bool) -> list[str]:
     """Build the Model Aliases section (matches TS lines 438-447)."""
     if not model_alias_lines or is_minimal:
         return []
@@ -273,9 +282,7 @@ def build_model_aliases_section(
 
 
 def build_docs_section(
-    docs_path: str | None,
-    is_minimal: bool,
-    read_tool_name: str = "read_file"
+    docs_path: str | None, is_minimal: bool, read_tool_name: str = "read_file"
 ) -> list[str]:
     """Build the Documentation section (matches TS lines 146-161)."""
     docs_path_trimmed = docs_path.strip() if docs_path else ""
@@ -297,51 +304,16 @@ def build_docs_section(
     ]
 
 
-def build_time_section(
-    user_timezone: str | None
-) -> list[str]:
+def build_time_section(user_timezone: str | None) -> list[str]:
     """Build the Time section (matches TS lines 75-80)."""
-    from datetime import datetime
-    
-    # Always include current date, even if timezone is not set
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    current_time = datetime.now().strftime("%H:%M:%S")
-    day_of_week = datetime.now().strftime("%A")
-    year = datetime.now().strftime("%Y")
-    
-    lines = [
+    if not user_timezone:
+        return []
+
+    return [
         "## Current Date & Time",
-        f"**Today's date**: {current_date} ({day_of_week})",
-        f"**Current time**: {current_time}",
-        f"**Current year**: {year}",
+        f"Time zone: {user_timezone}",
         "",
-        f"**CRITICAL NOTICE**: Today is {current_date}. This is the ACTUAL CURRENT DATE, not a future date or system error.",
-        "",
-        "**Your training data may be from 2024 or earlier, but you are now operating in {}. This is NORMAL and CORRECT.**".format(year),
-        "",
-        "**IMPORTANT INSTRUCTIONS:**",
-        "",
-        "1. **NEVER mention or reference 2024** when discussing current events or dates",
-        "2. **NEVER say things like:**",
-        "   - 'system time error' or 'time difference'",
-        "   - 'unable to connect due to time issues'",  
-        "   - '2024 vs 2026 difference'",
-        "   - 'connection failure due to date'",
-        "   - 'my training data is from 2024 so I cannot...'",
-        "",
-        "3. **When searching for current news/events:**",
-        "   - Use 'latest', 'current', 'today', 'recent' - NEVER include '2024'",
-        "   - Search for 'latest news' NOT '2024 news'",
-        "   - Search for 'current events' NOT '2024 events'",
-        "",
-        "4. **Accept {} as the current year and proceed normally with all tasks**".format(year),
-        ""
     ]
-    
-    if user_timezone:
-        lines.insert(3, f"**Time zone**: {user_timezone}")
-    
-    return lines
 
 
 def build_workspace_files_note_section() -> list[str]:
@@ -392,7 +364,9 @@ def build_messaging_section(
     if "message" in available_tools:
         lines.append("")
         lines.append("### message tool")
-        lines.append("- Use `message` for proactive sends + channel actions (polls, reactions, etc.).")
+        lines.append(
+            "- Use `message` for proactive sends + channel actions (polls, reactions, etc.)."
+        )
         lines.append("- For `action=send`, include `to` and `message`.")
         lines.append(
             f"- If multiple channels are configured, pass `channel` ({message_channel_options})."
@@ -405,7 +379,7 @@ def build_messaging_section(
         if inline_buttons_enabled:
             lines.append(
                 "- Inline buttons supported. Use `action=send` with "
-                '`buttons=[[{text,callback_data}]]` (callback_data routes back as a user message).'
+                "`buttons=[[{text,callback_data}]]` (callback_data routes back as a user message)."
             )
         elif runtime_channel:
             lines.append(
@@ -422,10 +396,7 @@ def build_messaging_section(
     return lines
 
 
-def build_voice_section(
-    is_minimal: bool,
-    tts_hint: str | None = None
-) -> list[str]:
+def build_voice_section(is_minimal: bool, tts_hint: str | None = None) -> list[str]:
     """Build the Voice (TTS) section (matches TS lines 135-143)."""
     if is_minimal:
         return []
@@ -485,10 +456,7 @@ def build_runtime_section(
     ]
 
 
-def build_heartbeats_section(
-    heartbeat_prompt: str | None,
-    is_minimal: bool = False
-) -> list[str]:
+def build_heartbeats_section(heartbeat_prompt: str | None, is_minimal: bool = False) -> list[str]:
     """Build the Heartbeats section (matches TS lines 588-599)."""
     if is_minimal or not heartbeat_prompt:
         return []
@@ -509,9 +477,7 @@ def build_heartbeats_section(
     ]
 
 
-def build_sandbox_section(
-    sandbox_info: dict | None = None
-) -> list[str]:
+def build_sandbox_section(sandbox_info: dict | None = None) -> list[str]:
     """Build the Sandbox section (matches TS lines 457-498)."""
     if not sandbox_info or not sandbox_info.get("enabled"):
         return []
@@ -562,10 +528,7 @@ def build_sandbox_section(
     return parts
 
 
-def build_user_identity_section(
-    owner_line: str | None,
-    is_minimal: bool = False
-) -> list[str]:
+def build_user_identity_section(owner_line: str | None, is_minimal: bool = False) -> list[str]:
     """Build the User Identity section (matches TS lines 68-73)."""
     if not owner_line or is_minimal:
         return []
@@ -611,24 +574,28 @@ def build_reaction_guidance_section(
     channel = reaction_guidance.get("channel", "unknown")
 
     if level == "minimal":
-        guidance_text = "\n".join([
-            f"Reactions are enabled for {channel} in MINIMAL mode.",
-            "React ONLY when truly relevant:",
-            "- Acknowledge important user requests or confirmations",
-            "- Express genuine sentiment (humor, appreciation) sparingly",
-            "- Avoid reacting to routine messages or your own replies",
-            "Guideline: at most 1 reaction per 5-10 exchanges.",
-        ])
+        guidance_text = "\n".join(
+            [
+                f"Reactions are enabled for {channel} in MINIMAL mode.",
+                "React ONLY when truly relevant:",
+                "- Acknowledge important user requests or confirmations",
+                "- Express genuine sentiment (humor, appreciation) sparingly",
+                "- Avoid reacting to routine messages or your own replies",
+                "Guideline: at most 1 reaction per 5-10 exchanges.",
+            ]
+        )
     else:
-        guidance_text = "\n".join([
-            f"Reactions are enabled for {channel} in EXTENSIVE mode.",
-            "Feel free to react liberally:",
-            "- Acknowledge messages with appropriate emojis",
-            "- Express sentiment and personality through reactions",
-            "- React to interesting content, humor, or notable events",
-            "- Use reactions to confirm understanding or agreement",
-            "Guideline: react whenever it feels natural.",
-        ])
+        guidance_text = "\n".join(
+            [
+                f"Reactions are enabled for {channel} in EXTENSIVE mode.",
+                "Feel free to react liberally:",
+                "- Acknowledge messages with appropriate emojis",
+                "- Express sentiment and personality through reactions",
+                "- React to interesting content, humor, or notable events",
+                "- Use reactions to confirm understanding or agreement",
+                "Guideline: react whenever it feels natural.",
+            ]
+        )
 
     return [
         "## Reactions",
@@ -651,40 +618,32 @@ def build_reasoning_format_section(
     ]
 
 
-def build_skills_section(
-    workspace_dir: Path | None = None,
-    config: Any | None = None,
-    read_tool_name: str = "read_file"
+def build_workspace_skills_section(
+    workspace_dir: Path | None = None, config: Any | None = None, read_tool_name: str = "read_file"
 ) -> list[str]:
     """
-    Build the Skills section (matches TS skills integration).
-    
-    Args:
-        workspace_dir: Workspace directory
-        config: OpenClaw configuration
-        read_tool_name: Name of the read tool to reference
-    
-    Returns:
-        List of prompt lines for skills section
+    Build the Skills section from workspace SKILL.md files.
+    Separated from `build_skills_section` to preserve the string-based
+    API used by other callers/tests.
     """
     if not workspace_dir:
         return []
-    
+
     try:
         from .skills import build_workspace_skills_prompt
-        
+
         skills_prompt = build_workspace_skills_prompt(
             workspace_dir=workspace_dir,
             config=config,
-            read_tool_name=read_tool_name
+            read_tool_name=read_tool_name,
         )
-        
+
         if skills_prompt:
             # Already formatted with ## Available Skills header
             return [skills_prompt, ""]
-        
+
         return []
-    
+
     except ImportError:
         logger.warning("Skills module not available")
         return []

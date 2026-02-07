@@ -62,11 +62,28 @@ class ToolRegistry:
 
         # Image analysis
         self.register(ImageTool())
-        
+
         # Memory search (if workspace available)
         if self._workspace_dir:
             from pathlib import Path
-            workspace_path = Path(self._workspace_dir) if isinstance(self._workspace_dir, str) else self._workspace_dir
+
+            workspace_path = (
+                Path(self._workspace_dir)
+                if isinstance(self._workspace_dir, str)
+                else self._workspace_dir
+            )
+            self.register(MemorySearchTool(workspace_path, self._config))
+            self.register(MemoryGetTool(workspace_path, self._config))
+
+        # Memory search (if workspace available)
+        if self._workspace_dir:
+            from pathlib import Path
+
+            workspace_path = (
+                Path(self._workspace_dir)
+                if isinstance(self._workspace_dir, str)
+                else self._workspace_dir
+            )
             self.register(MemorySearchTool(workspace_path, self._config))
             self.register(MemoryGetTool(workspace_path, self._config))
 

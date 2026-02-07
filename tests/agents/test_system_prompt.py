@@ -1,7 +1,9 @@
 """Tests for system prompt builder"""
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from openclaw.agents.system_prompt import (
     build_agent_system_prompt,
     format_skills_for_prompt,
@@ -52,14 +54,29 @@ class TestBuildAgentSystemPrompt:
 
         # 26 sections check
         for marker in [
-            "## Tooling", "## Tool Call Style", "## Safety",
-            "## OpenClaw CLI Quick Reference", "## Skills", "## Memory Recall",
-            "## OpenClaw Self-Update", "## Model Aliases", "## Workspace",
-            "## Documentation", "## User Identity", "## Current Date & Time",
-            "## Workspace Files (injected)", "## Reply Tags", "## Messaging",
-            "## Voice (TTS)", "## Group Chat Context", "## Reactions",
-            "## Reasoning Format", "# Project Context", "## Silent Replies",
-            "## Heartbeats", "## Runtime",
+            "## Tooling",
+            "## Tool Call Style",
+            "## Safety",
+            "## OpenClaw CLI Quick Reference",
+            "## Skills",
+            "## Memory Recall",
+            "## OpenClaw Self-Update",
+            "## Model Aliases",
+            "## Workspace",
+            "## Documentation",
+            "## User Identity",
+            "## Current Date & Time",
+            "## Workspace Files (injected)",
+            "## Reply Tags",
+            "## Messaging",
+            "## Voice (TTS)",
+            "## Group Chat Context",
+            "## Reactions",
+            "## Reasoning Format",
+            "# Project Context",
+            "## Silent Replies",
+            "## Heartbeats",
+            "## Runtime",
         ]:
             assert marker in prompt, f"Missing: {marker}"
 
@@ -122,17 +139,21 @@ class TestBuildAgentSystemPrompt:
 
 class TestFormatSkillsForPrompt:
     def test_basic(self):
-        prompt = format_skills_for_prompt([
-            {"name": "github", "description": "GitHub CLI", "location": "/path/SKILL.md"},
-        ])
+        prompt = format_skills_for_prompt(
+            [
+                {"name": "github", "description": "GitHub CLI", "location": "/path/SKILL.md"},
+            ]
+        )
         assert "<available_skills>" in prompt
         assert "<name>github</name>" in prompt
 
     def test_multiple(self):
-        prompt = format_skills_for_prompt([
-            {"name": "a", "description": "A", "location": "/a"},
-            {"name": "b", "description": "B", "location": "/b", "tags": ["x", "y"]},
-        ])
+        prompt = format_skills_for_prompt(
+            [
+                {"name": "a", "description": "A", "location": "/a"},
+                {"name": "b", "description": "B", "location": "/b", "tags": ["x", "y"]},
+            ]
+        )
         assert prompt.count("<skill>") == 2
         assert "<tags>x, y</tags>" in prompt
 
@@ -151,11 +172,15 @@ class TestPromptLength:
 
     def test_minimal_shorter(self, tmp_path):
         full = build_agent_system_prompt(
-            workspace_dir=tmp_path, tool_names=["read_file"],
-            skills_prompt="<s/>", prompt_mode="full",
+            workspace_dir=tmp_path,
+            tool_names=["read_file"],
+            skills_prompt="<s/>",
+            prompt_mode="full",
         )
         minimal = build_agent_system_prompt(
-            workspace_dir=tmp_path, tool_names=["read_file"],
-            skills_prompt="<s/>", prompt_mode="minimal",
+            workspace_dir=tmp_path,
+            tool_names=["read_file"],
+            skills_prompt="<s/>",
+            prompt_mode="minimal",
         )
         assert len(minimal) < len(full)

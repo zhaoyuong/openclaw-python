@@ -3,6 +3,7 @@ Frontmatter parsing for SKILL.md files
 
 Matches TypeScript src/agents/skills/frontmatter.ts
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     """
     Parse YAML frontmatter from markdown (matches TS parseFrontmatterBlock).
-    
+
     Format:
     ---
     name: skill-name
@@ -31,25 +32,25 @@ def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     openclaw:
       always: true
     ---
-    
+
     # Skill Content
-    
+
     Args:
         content: Full markdown content
-    
+
     Returns:
         (frontmatter_dict, body_content)
     """
     # Match ---\n...\n---
-    pattern = r'^---\s*\n(.*?)\n---\s*\n(.*)$'
+    pattern = r"^---\s*\n(.*?)\n---\s*\n(.*)$"
     match = re.match(pattern, content, re.DOTALL)
-    
+
     if not match:
         return {}, content
-    
+
     yaml_content = match.group(1)
     body = match.group(2)
-    
+
     try:
         frontmatter = yaml.safe_load(yaml_content) or {}
         if not isinstance(frontmatter, dict):
@@ -58,25 +59,25 @@ def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     except yaml.YAMLError as e:
         logger.warning(f"Failed to parse YAML frontmatter: {e}")
         return {}, content
-    
+
     return frontmatter, body
 
 
 def parse_openclaw_metadata(frontmatter: dict[str, Any]) -> OpenClawSkillMetadata | None:
     """
     Extract OpenClaw metadata from frontmatter (matches TS resolveOpenClawMetadata).
-    
+
     Args:
         frontmatter: Parsed frontmatter dictionary
-    
+
     Returns:
         OpenClawSkillMetadata or None
     """
     openclaw = frontmatter.get("openclaw", {})
-    
+
     if not openclaw or not isinstance(openclaw, dict):
         return None
-    
+
     # Parse requires section
     requires_raw = openclaw.get("requires", {})
     requires = {}
@@ -85,7 +86,7 @@ def parse_openclaw_metadata(frontmatter: dict[str, Any]) -> OpenClawSkillMetadat
             value = requires_raw.get(key, [])
             if value:
                 requires[key] = normalize_string_list(value)
-    
+
     # Parse install specs
     install_raw = openclaw.get("install", [])
     install = []
@@ -94,7 +95,7 @@ def parse_openclaw_metadata(frontmatter: dict[str, Any]) -> OpenClawSkillMetadat
             parsed = parse_install_spec(spec)
             if parsed:
                 install.append(parsed)
-    
+
     return OpenClawSkillMetadata(
         always=openclaw.get("always", False),
         skill_key=openclaw.get("skillKey"),
@@ -103,32 +104,32 @@ def parse_openclaw_metadata(frontmatter: dict[str, Any]) -> OpenClawSkillMetadat
         homepage=openclaw.get("homepage"),
         os=normalize_string_list(openclaw.get("os", [])),
         requires=requires,
-        install=install
+        install=install,
     )
 
 
 def parse_install_spec(spec: Any) -> SkillInstallSpec | None:
     """
     Parse installation spec (matches TS parseInstallSpec).
-    
+
     Args:
         spec: Raw install spec from YAML
-    
+
     Returns:
         SkillInstallSpec or None
     """
     if not spec or not isinstance(spec, dict):
         return None
-    
+
     # Get kind
     kind_raw = spec.get("kind", spec.get("type", ""))
     if not isinstance(kind_raw, str):
         return None
-    
+
     kind = kind_raw.strip().lower()
     if kind not in ("brew", "node", "go", "uv", "download"):
         return None
-    
+
     return SkillInstallSpec(
         kind=kind,
         id=spec.get("id"),
@@ -149,77 +150,76 @@ def parse_install_spec(spec: Any) -> SkillInstallSpec | None:
 def parse_invocation_policy(frontmatter: dict[str, Any]) -> SkillInvocationPolicy:
     """
     Extract invocation policy from frontmatter (matches TS resolveSkillInvocationPolicy).
-    
+
     Args:
         frontmatter: Parsed frontmatter dictionary
-    
+
     Returns:
         SkillInvocationPolicy
     """
     openclaw = frontmatter.get("openclaw", {})
-    
+
     if not isinstance(openclaw, dict):
         return SkillInvocationPolicy()
-    
+
     user_invocable = openclaw.get("userInvocable", True)
     disable_model = openclaw.get("disableModelInvocation", False)
-    
+
     return SkillInvocationPolicy(
-        user_invocable=user_invocable,
-        disable_model_invocation=disable_model
+        user_invocable=user_invocable, disable_model_invocation=disable_model
     )
 
 
 def normalize_string_list(value: Any) -> list[str]:
     """
     Normalize value to string list (matches TS normalizeStringList).
-    
+
     Args:
         value: Raw value (string, list, or other)
-    
+
     Returns:
         List of strings
     """
     if not value:
         return []
-    
+
     if isinstance(value, list):
         return [str(item).strip() for item in value if item]
-    
+
     if isinstance(value, str):
         # Split by comma
         return [item.strip() for item in value.split(",") if item.strip()]
-    
+
     return []
 
 
 def extract_description_from_body(body: str, max_length: int = 200) -> str:
     """
     Extract description from markdown body.
-    
+
     Takes the first paragraph as description.
-    
+
     Args:
         body: Markdown body content
         max_length: Maximum description length
-    
+
     Returns:
         Description string
     """
     if not body:
         return ""
-    
+
     # Get first paragraph
     paragraphs = body.strip().split("\n\n")
     if not paragraphs:
         return ""
-    
+
     # Remove markdown headers
     first_para = paragraphs[0].strip()
-    first_para = re.sub(r'^#+\s*', '', first_para)
-    
+    first_para = re.sub(r"^#+\s*", "", first_para)
+
     # Limit length
     if len(first_para) > max_length:
         first_para = first_para[:max_length] + "..."
-    
+
     return first_para

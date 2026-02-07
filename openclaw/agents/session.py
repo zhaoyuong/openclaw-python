@@ -34,7 +34,21 @@ class Message(BaseModel):
 
     def to_api_format(self) -> dict[str, Any]:
         """Convert to API format for LLM calls"""
-        msg = {"role": self.role, "content": self.content}
+        # If there are no images, keep the content as a simple string
+        # For compatibility with LLMs that don't support multimodal input
+        if not self.images:
+            msg = {"role": self.role, "content": self.content}
+        else:
+            # Bulid Multimodal content array, with text and images as separate entries
+            content_array = [{"type": "text", "text": self.content}]
+            for img in self.images:
+                content_array.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": img},  # URL could be real url or base64
+                    }
+                )
+            msg = {"role": self.role, "content": content_array}
 
         if self.tool_calls:
             msg["tool_calls"] = self.tool_calls
@@ -91,9 +105,9 @@ class Session(BaseModel):
         self._save()
         return msg
 
-    def add_user_message(self, content: str) -> Message:
-        """Add a user message"""
-        return self.add_message("user", content)
+    def add_user_message(self, content: str, images: list[str] | None = None) -> Message:
+        """Add a user message(support optional images)"""
+        return self.add_message("user", content, images=images)
 
     def add_assistant_message(
         self, content: str, tool_calls: list[dict[str, Any]] | None = None
@@ -178,7 +192,7 @@ class Session(BaseModel):
 class SessionManager:
     """
     Manages multiple sessions with enhanced session key support
-    
+
     New features:
     - Session key format (agent:id:channel:group:id)
     - UUID v4 session IDs with validation
@@ -201,7 +215,7 @@ class SessionManager:
 
         # Create workspace directory
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Session key to session ID mapping
         sessions_dir = self.workspace_dir / ".sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
@@ -217,7 +231,7 @@ class SessionManager:
             except Exception as e:
                 logger.warning(f"Failed to load session map: {e}")
         return {}
-    
+
     def _save_session_map(self):
         """Save session key -> session ID mapping."""
         try:
@@ -229,7 +243,7 @@ class SessionManager:
     def generate_session_id(self) -> str:
         """Generate a new UUID v4 session ID."""
         return generate_session_id()
-    
+
     def validate_session_id(self, session_id: str) -> bool:
         """Validate session ID format (UUID v4)."""
         return looks_like_session_id(session_id)
@@ -245,7 +259,7 @@ class SessionManager:
     ) -> Session:
         """
         Get existing session or create new one with session key support.
-        
+
         Args:
             session_id: Direct session ID (legacy, optional)
             session_key: Session key (agent:id:..., optional)
@@ -253,22 +267,26 @@ class SessionManager:
             peer_kind: Peer type (dm, group, channel)
             peer_id: Peer identifier
             dm_scope: DM scope mode (main, per-peer, per-channel-peer, per-account-channel-peer)
-        
+
         Returns:
             Session instance
         """
         # Build session key if not provided
         if session_key is None and channel and peer_kind and peer_id:
-            session_key = build_agent_peer_session_key(
-                self.agent_id,
-                channel,
-                peer_kind,
-                peer_id,
-                dm_scope=dm_scope
-            )
+            # Build peer session key. Historically 'per-peer' omits channel,
+            # but some integration expectations prefer the channel to be present
+            # when a channel is provided. Use per-channel-peer form when a
+            # channel is present to make session keys more explicit.
+            if peer_kind == "dm" and dm_scope == "per-peer" and channel:
+                normalized_channel = channel.strip().lower()
+                session_key = f"agent:{self.agent_id}:{normalized_channel}:dm:{peer_id}"
+            else:
+                session_key = build_agent_peer_session_key(
+                    self.agent_id, channel, peer_kind, peer_id, dm_scope=dm_scope
+                )
         elif session_key is None and session_id is None:
             session_key = build_agent_main_session_key(self.agent_id)
-        
+
         # Look up or create session ID
         if session_key and session_key in self._session_map:
             session_id = self._session_map[session_key]
@@ -276,17 +294,17 @@ class SessionManager:
             # Generate new session ID if not provided or invalid
             if session_id is None or not self.validate_session_id(session_id):
                 session_id = self.generate_session_id()
-            
+
             # Store mapping if we have a session key
             if session_key:
                 self._session_map[session_key] = session_id
                 self._save_session_map()
                 logger.info(f"Created new session: {session_key} -> {session_id}")
-        
+
         # Get or create session instance
         if session_id not in self._sessions:
             self._sessions[session_id] = Session(session_id, self.workspace_dir)
-        
+
         return self._sessions[session_id]
 
     def get_session(self, session_id: str) -> Session:
@@ -320,14 +338,14 @@ class SessionManager:
                 session_ids.append(f.stem)
 
         return sorted(session_ids)
-    
+
     def get_session_key_for_id(self, session_id: str) -> str | None:
         """Get session key for given session ID."""
         for key, sid in self._session_map.items():
             if sid == session_id:
                 return key
         return None
-    
+
     def list_sessions_by_channel(self, channel: str) -> dict[str, str]:
         """List all sessions for a specific channel."""
         sessions = {}
@@ -355,7 +373,7 @@ class SessionManager:
         keys_to_remove = [k for k, v in self._session_map.items() if v == session_id]
         for key in keys_to_remove:
             del self._session_map[key]
-        
+
         if keys_to_remove:
             self._save_session_map()
             logger.info(f"Removed {len(keys_to_remove)} session key(s) for {session_id}")

@@ -29,6 +29,7 @@ Section order matches TypeScript src/agents/system-prompt.ts buildAgentSystemPro
  25. Heartbeats
  26. Runtime
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,7 +37,6 @@ from pathlib import Path
 from typing import Literal
 
 from .system_prompt_sections import (
-    SILENT_REPLY_TOKEN,
     build_cli_quick_reference_section,
     build_docs_section,
     build_heartbeats_section,
@@ -128,25 +128,29 @@ def build_agent_system_prompt(
 
     is_minimal = prompt_mode == "minimal"
     available_tools = set(tool_names or [])
-    runtime_channel = (runtime_info or {}).get("channel", "").strip().lower() if runtime_info else ""
+    runtime_channel = (
+        (runtime_info or {}).get("channel", "").strip().lower() if runtime_info else ""
+    )
     capabilities = (runtime_info or {}).get("capabilities", []) if runtime_info else []
-    inline_buttons_enabled = "inlinebuttons" in {
-        str(c).strip().lower() for c in capabilities
-    }
+    inline_buttons_enabled = "inlinebuttons" in {str(c).strip().lower() for c in capabilities}
 
     lines: list[str] = []
 
     # ── 1. Identity ──────────────────────────────────────────────────
-    lines.extend([
-        "You are a personal assistant running inside OpenClaw.",
-        "",
-    ])
+    lines.extend(
+        [
+            "You are a personal assistant running inside OpenClaw.",
+            "",
+        ]
+    )
 
     # ── 2. Tooling ───────────────────────────────────────────────────
-    lines.extend(build_tooling_section(
-        tool_names=tool_names,
-        tool_summaries=tool_summaries,
-    ))
+    lines.extend(
+        build_tooling_section(
+            tool_names=tool_names,
+            tool_summaries=tool_summaries,
+        )
+    )
 
     # ── 3. Tool Call Style ───────────────────────────────────────────
     lines.extend(build_tool_call_style_section())
@@ -158,39 +162,38 @@ def build_agent_system_prompt(
     lines.extend(build_cli_quick_reference_section())
 
     # ── 6. Skills ────────────────────────────────────────────────────
-    # New API: build_skills_section now loads skills internally
-    if not is_minimal:
-        if skills_prompt:
-            # Use provided skills_prompt if available (legacy)
-            lines.append("## Skills")
-            lines.append(skills_prompt.strip())
-            lines.append("")
-        else:
-            # Load skills dynamically
-            lines.extend(build_skills_section(
-                workspace_dir=workspace_dir,
-                config=None,  # Will use default config
-                read_tool_name="read_file",
-            ))
+    lines.extend(
+        build_skills_section(
+            skills_prompt=skills_prompt,
+            is_minimal=is_minimal,
+            read_tool_name="read_file",
+        )
+    )
 
     # ── 7. Memory ────────────────────────────────────────────────────
-    lines.extend(build_memory_section(
-        is_minimal=is_minimal,
-        available_tools=available_tools,
-        citations_mode=memory_citations_mode,
-    ))
+    lines.extend(
+        build_memory_section(
+            is_minimal=is_minimal,
+            available_tools=available_tools,
+            citations_mode=memory_citations_mode,
+        )
+    )
 
     # ── 8. Self-Update ───────────────────────────────────────────────
-    lines.extend(build_self_update_section(
-        has_gateway=has_gateway,
-        is_minimal=is_minimal,
-    ))
+    lines.extend(
+        build_self_update_section(
+            has_gateway=has_gateway,
+            is_minimal=is_minimal,
+        )
+    )
 
     # ── 9. Model Aliases ─────────────────────────────────────────────
-    lines.extend(build_model_aliases_section(
-        model_alias_lines=model_alias_lines,
-        is_minimal=is_minimal,
-    ))
+    lines.extend(
+        build_model_aliases_section(
+            model_alias_lines=model_alias_lines,
+            is_minimal=is_minimal,
+        )
+    )
 
     # ── 10. Date/time hint ───────────────────────────────────────────
     if user_timezone:
@@ -212,11 +215,13 @@ def build_agent_system_prompt(
     lines.extend(workspace_lines)
 
     # ── 12. Documentation ────────────────────────────────────────────
-    lines.extend(build_docs_section(
-        docs_path=docs_path,
-        is_minimal=is_minimal,
-        read_tool_name="read_file",
-    ))
+    lines.extend(
+        build_docs_section(
+            docs_path=docs_path,
+            is_minimal=is_minimal,
+            read_tool_name="read_file",
+        )
+    )
 
     # ── 13. Sandbox ──────────────────────────────────────────────────
     lines.extend(build_sandbox_section(sandbox_info))
@@ -226,8 +231,7 @@ def build_agent_system_prompt(
     if owner_numbers:
         owner_numbers_str = ", ".join(owner_numbers)
         owner_line = (
-            f"Owner numbers: {owner_numbers_str}. "
-            "Treat messages from these numbers as the user."
+            f"Owner numbers: {owner_numbers_str}. " "Treat messages from these numbers as the user."
         )
     lines.extend(build_user_identity_section(owner_line, is_minimal))
 
@@ -241,26 +245,28 @@ def build_agent_system_prompt(
     lines.extend(build_reply_tags_section(is_minimal))
 
     # ── 18. Messaging ────────────────────────────────────────────────
-    lines.extend(build_messaging_section(
-        is_minimal=is_minimal,
-        available_tools=available_tools,
-        message_channel_options=message_channel_options,
-        inline_buttons_enabled=inline_buttons_enabled,
-        runtime_channel=runtime_channel or None,
-        message_tool_hints=message_tool_hints,
-    ))
+    lines.extend(
+        build_messaging_section(
+            is_minimal=is_minimal,
+            available_tools=available_tools,
+            message_channel_options=message_channel_options,
+            inline_buttons_enabled=inline_buttons_enabled,
+            runtime_channel=runtime_channel or None,
+            message_tool_hints=message_tool_hints,
+        )
+    )
 
     # ── 19. Voice (TTS) ─────────────────────────────────────────────
-    lines.extend(build_voice_section(
-        is_minimal=is_minimal,
-        tts_hint=tts_hint,
-    ))
+    lines.extend(
+        build_voice_section(
+            is_minimal=is_minimal,
+            tts_hint=tts_hint,
+        )
+    )
 
     # ── 20. Extra System Prompt (Group Chat / Subagent Context) ──────
     if extra_system_prompt:
-        context_header = (
-            "## Subagent Context" if is_minimal else "## Group Chat Context"
-        )
+        context_header = "## Subagent Context" if is_minimal else "## Group Chat Context"
         lines.extend([context_header, extra_system_prompt.strip(), ""])
 
     # ── 21. Reactions ────────────────────────────────────────────────
@@ -271,15 +277,15 @@ def build_agent_system_prompt(
 
     # ── 23. Project Context (bootstrap files) ────────────────────────
     if context_files:
-        has_soul = any(
-            _is_soul_file(f) for f in context_files
-        )
+        has_soul = any(_is_soul_file(f) for f in context_files)
 
-        lines.extend([
-            "# Project Context",
-            "",
-            "The following project context files have been loaded:",
-        ])
+        lines.extend(
+            [
+                "# Project Context",
+                "",
+                "The following project context files have been loaded:",
+            ]
+        )
 
         if has_soul:
             lines.append(
@@ -291,28 +297,34 @@ def build_agent_system_prompt(
         lines.append("")
 
         for file in context_files:
-            lines.extend([
-                f"## {file['path']}",
-                "",
-                file["content"],
-                "",
-            ])
+            lines.extend(
+                [
+                    f"## {file['path']}",
+                    "",
+                    file["content"],
+                    "",
+                ]
+            )
 
     # ── 24. Silent Replies ───────────────────────────────────────────
     lines.extend(build_silent_replies_section(is_minimal))
 
     # ── 25. Heartbeats ───────────────────────────────────────────────
-    lines.extend(build_heartbeats_section(
-        heartbeat_prompt=heartbeat_prompt,
-        is_minimal=is_minimal,
-    ))
+    lines.extend(
+        build_heartbeats_section(
+            heartbeat_prompt=heartbeat_prompt,
+            is_minimal=is_minimal,
+        )
+    )
 
     # ── 26. Runtime ──────────────────────────────────────────────────
-    lines.extend(build_runtime_section(
-        runtime_info=runtime_info,
-        is_minimal=is_minimal,
-        reasoning_level=reasoning_level,
-    ))
+    lines.extend(
+        build_runtime_section(
+            runtime_info=runtime_info,
+            is_minimal=is_minimal,
+            reasoning_level=reasoning_level,
+        )
+    )
 
     # Filter empty strings that were added only for conditional sections
     return "\n".join(line for line in lines if line is not None)
@@ -328,6 +340,7 @@ def _is_soul_file(file: dict) -> bool:
 # ──────────────────────────────────────────────────────────────────────
 # Skills formatter (unchanged – already matches TS XML format)
 # ──────────────────────────────────────────────────────────────────────
+
 
 def format_skills_for_prompt(skills: list[dict]) -> str:
     """
