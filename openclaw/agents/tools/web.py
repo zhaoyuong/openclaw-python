@@ -1,6 +1,7 @@
 """Web tools - search and fetch"""
 
 import logging
+import random
 from typing import Any
 
 import httpx
@@ -17,6 +18,12 @@ class WebFetchTool(AgentTool):
         super().__init__()
         self.name = "web_fetch"
         self.description = "Fetch content from a URL"
+        # NEW: Support both "parameters" and "args_schema" for compatibility with different LLMs
+        self.parameters = {
+            "type": "object",
+            "properties": {"url": {"type": "string", "description": "URL to fetch"}},
+            "required": ["url"],
+        }
 
     def get_schema(self) -> dict[str, Any]:
         return {
@@ -28,12 +35,30 @@ class WebFetchTool(AgentTool):
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         """Fetch URL"""
         url = params.get("url", "")
+        # We need a headers to avoid being blocked by some sites, and to mimic a real browser
+        ua_list = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        ]
+
+        headers = {
+            "User-Agent": random.choice(ua_list),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "DNT": "1",  # Do Not Track
+            "Connection": "keep-alive",
+        }
+
+        # proxy support if needed, e.g., for environments with restricted internet access
+        proxies = "http://127.0.0.1:7890"
 
         if not url:
-            return ToolResult(success=False, content="", error="No URL provided")
+            return ToolResult(success=False, content="No URL provided", error="No URL provided")
 
         try:
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                headers=headers, timeout=30.0, follow_redirects=True
+            ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
 
@@ -68,7 +93,7 @@ class WebFetchTool(AgentTool):
             )
         except Exception as e:
             logger.error(f"Web fetch error: {e}", exc_info=True)
-            return ToolResult(success=False, content="", error=str(e))
+            return ToolResult(success=False, content=f"Error fetching URL: {str(e)}", error=str(e))
 
 
 class WebSearchTool(AgentTool):
@@ -77,8 +102,20 @@ class WebSearchTool(AgentTool):
     def __init__(self):
         super().__init__()
         self.name = "web_search"
-        # Description aligned with TypeScript version (Brave Search equivalent)
-        self.description = "Search the web for information using DuckDuckGo. Returns titles, URLs, and snippets for fast research. Use this for finding articles, websites, news, and general information on the internet."
+        self.description = "Search the web for information using DuckDuckGo"
+        # NEW: Support both "parameters" and "args_schema" for compatibility with different LLMs
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "num_results": {
+                    "type": "integer",
+                    "description": "Number of results",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        }
 
     def get_schema(self) -> dict[str, Any]:
         return {
@@ -111,14 +148,16 @@ class WebSearchTool(AgentTool):
         count = min(int(count), 10)
 
         if not query:
-            return ToolResult(success=False, content="", error="No query provided")
+            return ToolResult(success=False, content="No query provided", error="No query provided")
 
         try:
             from ddgs import DDGS
 
             # Perform search
             with DDGS() as ddgs:
-                search_results = list(ddgs.text(query, max_results=count))
+                search_results = list(
+                    ddgs.text(query, region="wt-wt", safesearch="moderate", max_results=num_results)
+                )
 
             # Format results - aligned with TypeScript Brave Search format
             if search_results:
@@ -155,16 +194,17 @@ class WebSearchTool(AgentTool):
             else:
                 return ToolResult(
                     success=True,
-                    content="No results found for this query.",
-                    metadata={"query": query, "provider": "duckduckgo", "count": 0},
+                    content="No results found. Attempting fallback...",
+                    metadata={"count": 0, "query": query},
                 )
 
         except ImportError:
             return ToolResult(
                 success=False,
-                content="",
-                error="ddgs not installed. Install with: pip install ddgs",
+                content="Web search error: duckduckgo-search not installed. Install with: pip install duckduckgo-search",
+                error="duckduckgo-search not installed. Install with: pip install duckduckgo-search",
             )
         except Exception as e:
             logger.error(f"Web search error: {e}", exc_info=True)
-            return ToolResult(success=False, content="", error=str(e))
+            error_msg = f"Web search failed: {str(e)}. Please try another search term or method."
+            return ToolResult(success=False, content=error_msg, error=str(e))

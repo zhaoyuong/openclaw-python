@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from openclaw.media.image_ops import ImageProcessor, convert_heic_to_jpeg
-from openclaw.media.loader import MediaLoader, load_media
-from openclaw.media.mime import MediaKind, is_heic_file, is_heic_mime
+from openclaw.media.loader import load_media
+from openclaw.media.mime import MediaKind, is_heic_mime
 
 from .base import AgentTool, ToolResult
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class ImageTool(AgentTool):
     """
     Analyze images using vision models.
-    
+
     Matches TypeScript createImageTool functionality with:
     - Multi-model support (Claude, GPT-4, MiniMax)
     - Automatic model fallback
@@ -49,7 +49,6 @@ class ImageTool(AgentTool):
     ):
         """
         Initialize image tool.
-        
         Args:
             workspace_root: Workspace root for sandboxed access
             model_has_vision: Whether primary model has vision (affects description)
@@ -61,7 +60,6 @@ class ImageTool(AgentTool):
         self.workspace_root = workspace_root
         self.max_bytes = int(max_bytes_mb * 1024 * 1024) if max_bytes_mb else None
         self.optimize_images = optimize_images
-        
         # Adjust description based on model vision capability (matches TS lines 329-331)
         if model_has_vision:
             self.description = (
@@ -95,7 +93,7 @@ class ImageTool(AgentTool):
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         """
         Analyze image with vision model.
-        
+
         Matches TS image-tool.ts execute logic with:
         - Model fallback support
         - HEIC conversion
@@ -121,7 +119,7 @@ class ImageTool(AgentTool):
                 max_bytes = int(max_bytes_mb * 1024 * 1024)
             elif self.max_bytes:
                 max_bytes = self.max_bytes
-            
+
             # Load media
             media = await load_media(
                 source=image_input,
@@ -133,27 +131,22 @@ class ImageTool(AgentTool):
 
             if media.kind != MediaKind.IMAGE:
                 return ToolResult(
-                    success=False,
-                    content="",
-                    error=f"Unsupported media type: {media.kind.value}"
+                    success=False, content="", error=f"Unsupported media type: {media.kind.value}"
                 )
 
             buffer = media.buffer
             mime_type = media.content_type or "image/png"
-            
+
             # Convert HEIC to JPEG if needed
             if is_heic_mime(mime_type):
                 logger.info("Converting HEIC to JPEG")
                 buffer = await convert_heic_to_jpeg(buffer)
                 mime_type = "image/jpeg"
-            
             # Optimize if too large
             if self.optimize_images and max_bytes and len(buffer) > max_bytes:
                 logger.info(f"Optimizing image: {len(buffer)} -> target {max_bytes}")
                 optimized = await ImageProcessor.optimize_image(
-                    buffer,
-                    max_bytes=max_bytes,
-                    preserve_alpha=True
+                    buffer, max_bytes=max_bytes, preserve_alpha=True
                 )
                 buffer = optimized.buffer
                 mime_type = f"image/{optimized.format}"
@@ -163,9 +156,7 @@ class ImageTool(AgentTool):
             image_data = base64.b64encode(buffer).decode("utf-8")
 
             # Analyze with model (with fallback)
-            result = await self._analyze_with_fallback(
-                image_data, mime_type, prompt, model
-            )
+            result = await self._analyze_with_fallback(image_data, mime_type, prompt, model)
 
             return result
 
@@ -182,79 +173,82 @@ class ImageTool(AgentTool):
     ) -> ToolResult:
         """
         Analyze image with model fallback (matches TS runWithImageModelFallback).
-        
         Priority order:
         1. Model override (if specified)
         2. Claude Sonnet 4
         3. GPT-4 Vision
         4. Claude Sonnet 3.5
-        
         Args:
             image_data: Base64 image data
             media_type: MIME type
             prompt: Analysis prompt
             model_override: Override model
-        
         Returns:
             ToolResult
         """
         attempts = []
-        
+
         # Try models in order
         models_to_try = []
-        
+
         if model_override:
             models_to_try.append(("override", model_override))
-        
+
         # Add default fallback order
-        models_to_try.extend([
-            ("anthropic", "claude-3-5-sonnet-20241022"),
-            ("openai", "gpt-4-vision-preview"),
-            ("anthropic", "claude-3-5-sonnet-20240620"),
-        ])
-        
+        models_to_try.extend(
+            [
+                ("anthropic", "claude-3-5-sonnet-20241022"),
+                ("openai", "gpt-4-vision-preview"),
+                ("anthropic", "claude-3-5-sonnet-20240620"),
+            ]
+        )
+
         for provider, model_name in models_to_try:
             try:
                 if provider == "anthropic" or "claude" in model_name.lower():
-                    result = await self._analyze_with_claude(image_data, media_type, prompt, model_name)
+                    result = await self._analyze_with_claude(
+                        image_data, media_type, prompt, model_name
+                    )
                     if result.success:
                         result.metadata = result.metadata or {}
                         result.metadata["attempts"] = attempts
                         return result
                     else:
-                        attempts.append({
-                            "provider": "anthropic",
-                            "model": model_name,
-                            "error": result.error or "Unknown error"
-                        })
-                
+                        attempts.append(
+                            {
+                                "provider": "anthropic",
+                                "model": model_name,
+                                "error": result.error or "Unknown error",
+                            }
+                        )
+
                 elif provider == "openai" or "gpt" in model_name.lower():
-                    result = await self._analyze_with_openai(image_data, media_type, prompt, model_name)
+                    result = await self._analyze_with_openai(
+                        image_data, media_type, prompt, model_name
+                    )
                     if result.success:
                         result.metadata = result.metadata or {}
                         result.metadata["attempts"] = attempts
                         return result
                     else:
-                        attempts.append({
-                            "provider": "openai",
-                            "model": model_name,
-                            "error": result.error or "Unknown error"
-                        })
-            
+                        attempts.append(
+                            {
+                                "provider": "openai",
+                                "model": model_name,
+                                "error": result.error or "Unknown error",
+                            }
+                        )
+
             except Exception as e:
-                attempts.append({
-                    "provider": provider,
-                    "model": model_name,
-                    "error": str(e)
-                })
+                attempts.append({"provider": provider, "model": model_name, "error": str(e)})
                 logger.warning(f"Model {provider}/{model_name} failed: {e}")
-        
+
         # All models failed
         return ToolResult(
             success=False,
             content="",
             error=f"All vision models failed. Attempts: {len(attempts)}",
-            metadata={"attempts": attempts}
+            metadata={"attempts": attempts},
         )
 
     async def _analyze_with_claude(
@@ -266,13 +260,11 @@ class ImageTool(AgentTool):
     ) -> ToolResult:
         """
         Analyze image using Claude (matches TS Claude logic).
-        
         Args:
             image_data: Base64 encoded image
             media_type: MIME type
             prompt: Analysis prompt
             model: Claude model name
-        
         Returns:
             ToolResult
         """
@@ -348,13 +340,11 @@ class ImageTool(AgentTool):
     ) -> ToolResult:
         """
         Analyze image using OpenAI (matches TS OpenAI logic).
-        
         Args:
             image_data: Base64 encoded image
             media_type: MIME type
             prompt: Analysis prompt
             model: OpenAI model name
-        
         Returns:
             ToolResult
         """
@@ -400,7 +390,9 @@ class ImageTool(AgentTool):
                     "model": response.model,
                     "usage": {
                         "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                        "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+                        "completion_tokens": (
+                            response.usage.completion_tokens if response.usage else 0
+                        ),
                     },
                 },
             )
