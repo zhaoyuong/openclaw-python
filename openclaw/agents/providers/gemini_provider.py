@@ -5,10 +5,18 @@ Based on: https://ai.google.dev/gemini-api/docs/quickstart
 """
 
 import asyncio
+import base64
 import logging
+import mimetypes
 import os
+import pathlib
 from collections.abc import AsyncIterator
 from typing import Any
+
+try:
+    import httpx
+except Exception:
+    httpx = None
 
 try:
     from google import genai
@@ -19,6 +27,8 @@ except ImportError:
     genai = None  # type: ignore
     types = None  # type: ignore
     GENAI_AVAILABLE = False
+
+from openclaw.media import encode_image_to_base64
 
 from .base import LLMMessage, LLMProvider, LLMResponse
 
@@ -74,8 +84,13 @@ class GeminiProvider(LLMProvider):
 
         return self._client
 
-    def _convert_messages(self, messages: list[LLMMessage]) -> list[types.Content]:
-        """Convert messages to Gemini Content format"""
+    def _convert_messages(
+        self, messages: list[LLMMessage]
+    ) -> tuple[list[types.Content], str | None]:
+        """Convert messages to Gemini Content format
+
+        Returns a tuple: (contents, system_instruction)
+        """
         if not GENAI_AVAILABLE or types is None:
             raise ImportError("google-genai package required")
 
@@ -91,10 +106,12 @@ class GeminiProvider(LLMProvider):
             # Handle tool messages (function responses)
             if msg.role == "tool":
                 # Tool result should be in user role with function_response part
-                parts = [types.Part.from_function_response(
-                    name=getattr(msg, 'name', 'unknown_function'),
-                    response={"result": msg.content}
-                )]
+                parts = [
+                    types.Part.from_function_response(
+                        name=getattr(msg, "name", "unknown_function"),
+                        response={"result": msg.content},
+                    )
+                ]
                 content = types.Content(role="user", parts=parts)
                 gemini_contents.append(content)
                 continue
@@ -104,44 +121,100 @@ class GeminiProvider(LLMProvider):
 
             # Create parts list (text + optional images + optional tool calls)
             parts = []
-            
+
             # Add images first (if any)
-            if hasattr(msg, 'images') and msg.images:
-                for image_url in msg.images:
+            if hasattr(msg, "images") and msg.images:
+                for image_src in msg.images:
                     try:
-                        # Download image and convert to bytes
-                        import httpx
-                        response = httpx.get(image_url, timeout=30.0)
-                        if response.status_code == 200:
-                            image_bytes = response.content
-                            # Determine MIME type from URL or content
-                            mime_type = "image/jpeg"  # Default
-                            if ".png" in image_url.lower():
-                                mime_type = "image/png"
-                            elif ".gif" in image_url.lower():
-                                mime_type = "image/gif"
-                            elif ".webp" in image_url.lower():
-                                mime_type = "image/webp"
-                            
-                            # Create image part
-                            parts.append(types.Part.from_bytes(
-                                data=image_bytes,
-                                mime_type=mime_type
-                            ))
-                            logger.info(f"Added image to Gemini request: {image_url[:50]}...")
+                        image_bytes = None
+                        mime_type = None
+
+                        # Data URI / inline base64
+                        if isinstance(image_src, str) and image_src.startswith("data:"):
+                            header, b64 = image_src.split(",", 1)
+                            mime_type = (
+                                header.split(";")[0].split(":")[1]
+                                if ";" in header
+                                else "image/jpeg"
+                            )
+                            image_bytes = base64.b64decode(b64)
+
+                        # HTTP(S) URL
+                        elif isinstance(image_src, str) and image_src.startswith(
+                            ("http://", "https://")
+                        ):
+                            if httpx is None:
+                                raise RuntimeError("httpx required to download images from URLs")
+                            response = httpx.get(image_src, timeout=30.0)
+                            if response.status_code == 200:
+                                image_bytes = response.content
+                                mime_type = (
+                                    response.headers.get("content-type")
+                                    or mimetypes.guess_type(image_src)[0]
+                                    or "image/jpeg"
+                                )
+                            else:
+                                logger.warning(
+                                    f"Failed to download image: {image_src} (status: {response.status_code})"
+                                )
+
+                        # Try treating as base64 string without data URI
+                        elif isinstance(image_src, str):
+                            try:
+                                image_bytes = base64.b64decode(image_src)
+                                # Best-effort guess
+                                mime_type = mimetypes.guess_type("image.png")[0] or "image/png"
+                            except Exception:
+                                # Otherwise treat as local file path
+                                p = pathlib.Path(image_src)
+                                if p.exists():
+                                    image_bytes = p.read_bytes()
+                                    mime_type = (
+                                        mimetypes.guess_type(str(p))[0]
+                                        or "application/octet-stream"
+                                    )
+
+                        # If still no bytes, try helper encoder
+                        if not image_bytes:
+                            try:
+                                b64 = encode_image_to_base64(image_src)
+                                # encode_image_to_base64 returns a data-uri or base64 string; handle both
+                                if isinstance(b64, str) and b64.startswith("data:"):
+                                    _, body = b64.split(",", 1)
+                                    image_bytes = base64.b64decode(body)
+                                    mime_type = b64.split(";")[0].split(":")[1]
+                                else:
+                                    image_bytes = base64.b64decode(b64)
+                                    mime_type = "image/jpeg"
+                            except Exception:
+                                pass
+
+                        if image_bytes:
+                            parts.append(
+                                types.Part.from_bytes(
+                                    data=image_bytes,
+                                    mime_type=mime_type or "application/octet-stream",
+                                )
+                            )
+                            logger.info(
+                                f"Added image to Gemini request (source preview): {str(image_src)[:50]}..."
+                            )
                         else:
-                            logger.warning(f"Failed to download image: {image_url} (status: {response.status_code})")
+                            logger.warning(
+                                f"Could not load image for message: {str(image_src)[:80]}"
+                            )
                     except Exception as e:
-                        logger.error(f"Error loading image {image_url}: {e}")
-            
+                        logger.error(f"Error loading image {image_src}: {e}")
+
             # Add tool calls if present (for assistant messages)
-            if hasattr(msg, 'tool_calls') and msg.tool_calls and role == "model":
+            if hasattr(msg, "tool_calls") and msg.tool_calls and role == "model":
                 for tc in msg.tool_calls:
-                    parts.append(types.Part.from_function_call(
-                        name=tc.get("name"),
-                        args=tc.get("arguments", {})
-                    ))
-            
+                    parts.append(
+                        types.Part.from_function_call(
+                            name=tc.get("name"), args=tc.get("arguments", {})
+                        )
+                    )
+
             # Add text content if present
             if msg.content:
                 parts.append(types.Part.from_text(text=msg.content))
@@ -207,20 +280,22 @@ class GeminiProvider(LLMProvider):
                                 parameters=func_spec.get("parameters", {}),
                             )
                         )
-                
+
                 if function_declarations:
                     gemini_tools.append(types.Tool(function_declarations=function_declarations))
-                    logger.info(f"Added {len(function_declarations)} function declarations to Gemini")
-            
+                    logger.info(
+                        f"Added {len(function_declarations)} function declarations to Gemini"
+                    )
+
             # Add Google Search if requested
             if kwargs.get("enable_search"):
                 if not gemini_tools:
                     gemini_tools = []
                 gemini_tools.append(types.Tool(google_search=types.GoogleSearch()))
-            
+
             if gemini_tools:
                 config_params["tools"] = gemini_tools
-            
+
             # CRITICAL: Disable Automatic Function Calling when tools is empty or None
             # This prevents Gemini from inventing function calls
             if (tools is None or tools == []) and not kwargs.get("enable_search"):
@@ -253,37 +328,8 @@ class GeminiProvider(LLMProvider):
             # Stream chunks
             full_text = []
             tool_calls = []
-            chunk_count = 0
-            
+
             async for chunk in stream_response:
-                chunk_count += 1
-                
-                # DETAILED DEBUGGING: Log full chunk structure
-                logger.info(f"━━━ Gemini chunk {chunk_count} ━━━")
-                logger.info(f"  has_text: {bool(chunk.text)}")
-                logger.info(f"  text value: {repr(chunk.text) if chunk.text else 'None'}")
-                logger.info(f"  has_candidates: {hasattr(chunk, 'candidates') and bool(chunk.candidates)}")
-                
-                # Log finish_reason if available
-                if hasattr(chunk, 'candidates') and chunk.candidates:
-                    for idx, candidate in enumerate(chunk.candidates):
-                        logger.info(f"  candidate[{idx}]:")
-                        if hasattr(candidate, 'finish_reason'):
-                            finish_reason = candidate.finish_reason
-                            logger.info(f"    finish_reason: {finish_reason}")
-                        if hasattr(candidate, 'content'):
-                            logger.info(f"    has_content: {bool(candidate.content)}")
-                            if candidate.content and hasattr(candidate.content, 'parts'):
-                                logger.info(f"    parts count: {len(candidate.content.parts) if candidate.content.parts else 0}")
-                                if candidate.content.parts:
-                                    for part_idx, part in enumerate(candidate.content.parts):
-                                        logger.info(f"      part[{part_idx}]: {type(part).__name__}")
-                                        if hasattr(part, 'text'):
-                                            logger.info(f"        text: {repr(part.text)[:100]}")
-                                        if hasattr(part, 'function_call'):
-                                            logger.info(f"        function_call: {bool(part.function_call)}")
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                
                 # Handle text content
                 if chunk.text:
                     full_text.append(chunk.text)
@@ -308,6 +354,27 @@ class GeminiProvider(LLMProvider):
                                         logger.info(f"Gemini function call: {fc.name}")
 
             logger.info(f"Gemini stream complete: {chunk_count} chunks, {len(full_text)} text parts, {len(tool_calls)} tool calls")
+
+            # Send tool calls if any
+            if tool_calls:
+                yield LLMResponse(type="tool_call", content=None, tool_calls=tool_calls)
+
+                # Handle function calls
+                if hasattr(chunk, "candidates") and chunk.candidates:
+                    for candidate in chunk.candidates:
+                        if hasattr(candidate, "content") and candidate.content:
+                            # Check if parts exists and is not None
+                            if hasattr(candidate.content, "parts") and candidate.content.parts:
+                                for part in candidate.content.parts:
+                                    if hasattr(part, "function_call") and part.function_call:
+                                        fc = part.function_call
+                                        tool_call = {
+                                            "id": f"call_{fc.name}_{len(tool_calls)}",
+                                            "name": fc.name,
+                                            "arguments": dict(fc.args) if fc.args else {},
+                                        }
+                                        tool_calls.append(tool_call)
+                                        logger.info(f"Gemini function call: {fc.name}")
 
             # Send tool calls if any
             if tool_calls:
@@ -383,19 +450,6 @@ GEMINI_MODELS = {
         "context_window": 1000000,
         "max_output": 8192,
         "features": ["search"],
-        "stable": True,
-    },
-    "gemini-flash-latest": {
-        "name": "Gemini 1.5 Flash (Latest)",
-        "context_window": 1000000,
-        "max_output": 8192,
-        "features": ["search", "vision"],
-    },
-    "gemini-2.0-flash-lite": {
-        "name": "Gemini 2.0 Flash Lite",
-        "context_window": 1000000,
-        "max_output": 8192,
-        "features": ["search"],
     },
     # Add models/ prefix versions
     "models/gemini-3-flash-preview": {"alias": "gemini-3-flash-preview"},
@@ -403,6 +457,4 @@ GEMINI_MODELS = {
     "models/gemini-2.5-flash": {"alias": "gemini-2.5-flash"},
     "models/gemini-2.5-pro": {"alias": "gemini-2.5-pro"},
     "models/gemini-2.0-flash": {"alias": "gemini-2.0-flash"},
-    "models/gemini-flash-latest": {"alias": "gemini-flash-latest"},
-    "models/gemini-2.0-flash-lite": {"alias": "gemini-2.0-flash-lite"},
 }

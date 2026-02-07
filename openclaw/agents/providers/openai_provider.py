@@ -2,11 +2,14 @@
 OpenAI provider implementation
 """
 
+import json
 import logging
 import os
 from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI
+
+from openclaw.media import encode_image_to_base64
 
 from .base import LLMMessage, LLMProvider, LLMResponse
 
@@ -62,27 +65,73 @@ class OpenAIProvider(LLMProvider):
         """Stream responses from OpenAI"""
         client = self.get_client()
 
+        logger.info(f"📥 [Provider Received Tools]: Count={len(tools) if tools else 0}")
+
         # Convert messages to OpenAI format
         openai_messages = []
         for msg in messages:
-            openai_messages.append({"role": msg.role, "content": msg.content})
+            content_list = [{"type": "text", "text": msg.content}]
+
+            # [NEW] Handle images in messages
+            images = getattr(msg, "images", [])
+            if images:
+                for img_data in images:
+                    # Assuming img_data is a URL or a Base64 string
+                    logger.info(
+                        f"Processing image for message: {img_data[:30]}..."
+                    )  # Log the start of the image data
+                    b64_image = await encode_image_to_base64(img_data)
+                    content_list.append({"type": "image_url", "image_url": {"url": b64_image}})
+
+            m_dict = {"role": msg.role, "content": content_list}
+
+            if hasattr(msg, "name") and msg.name:
+                m_dict["name"] = msg.name
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                m_dict["tool_calls"] = msg.tool_calls
+            if hasattr(msg, "tool_call_id") and msg.tool_call_id:
+                m_dict["tool_call_id"] = msg.tool_call_id
+
+            openai_messages.append(m_dict)
+
+        formatted_tools = []
+        if tools:
+            for t in tools:
+                # First, check if it's already in the correct format (dict with "type")
+                if isinstance(t, dict) and "type" in t:
+                    formatted_tools.append(t)
+                else:
+                    # Try to format it as a function tool with name and description
+                    try:
+                        name = getattr(t, "name", "unnamed")
+                        desc = getattr(t, "description", "")
+                        formatted_tools.append(
+                            {
+                                "type": "function",
+                                "function": {"name": name, "description": desc, "parameters": {}},
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to format individual tool: {e}")
+        # Debug logging
+        api_payload = {
+            "model": self.model,
+            "messages": openai_messages,
+            "tools": formatted_tools if formatted_tools else None,
+            "stream": True,
+            "max_tokens": max_tokens,
+            **kwargs,
+        }
+        # logger.info("📤 [CRITICAL] FINAL JSON PAYLOAD SENT TO GEMINI:")
+        # print(json.dumps(api_payload, indent=2, ensure_ascii=False))
+
+        if len(openai_messages) >= 2:
+            # logger.info("📨 [Last 2 Messages sent to Gemini]:")
+            # print(json.dumps(openai_messages[-2:], indent=2, ensure_ascii=False))
+            pass
 
         try:
-            # Build request parameters
-            params = {
-                "model": self.model,
-                "messages": openai_messages,
-                "max_tokens": max_tokens,
-                "stream": True,
-                **kwargs,
-            }
-
-            # Add tools if provided
-            if tools:
-                params["tools"] = tools
-
-            # Start streaming
-            stream = await client.chat.completions.create(**params)
+            stream = await client.chat.completions.create(**api_payload)
 
             # Track tool calls
             tool_calls_buffer = {}
@@ -93,6 +142,9 @@ class OpenAIProvider(LLMProvider):
 
                 choice = chunk.choices[0]
                 delta = choice.delta
+
+                if hasattr(delta, "tool_calls") and delta.tool_calls:
+                    logger.info(f"⚙️ [LLM Tool Call Delta]: {delta.tool_calls}")
 
                 # Text content
                 if delta.content:
@@ -123,7 +175,6 @@ class OpenAIProvider(LLMProvider):
                 if choice.finish_reason:
                     # Emit tool calls if any
                     if tool_calls_buffer:
-                        import json
 
                         tool_calls = []
                         for tc in tool_calls_buffer.values():
