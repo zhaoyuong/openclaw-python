@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class TaskPrompt(NamedTuple):
     """Task prompt with metadata"""
+
     name: str
     description: str
     content: str
@@ -69,6 +70,7 @@ def load_task_prompt(prompt_path: Path) -> TaskPrompt | None:
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML frontmatter in {prompt_path.name}: {e}")
             frontmatter = {}
+
         return TaskPrompt(
             name=prompt_path.stem,
             description=frontmatter.get("description", ""),
@@ -103,6 +105,7 @@ def list_task_prompts(workspace_dir: Path) -> list[TaskPrompt]:
         prompt = load_task_prompt(prompt_file)
         if prompt:
             prompts.append(prompt)
+
     logger.debug(f"Loaded {len(prompts)} task prompts from {prompts_dir}")
     return prompts
 
@@ -120,6 +123,7 @@ def get_task_prompt(workspace_dir: Path, prompt_name: str) -> TaskPrompt | None:
     """
     prompts_dir = workspace_dir / ".pi" / "prompts"
     prompt_path = prompts_dir / f"{prompt_name}.md"
+
     return load_task_prompt(prompt_path)
 
 

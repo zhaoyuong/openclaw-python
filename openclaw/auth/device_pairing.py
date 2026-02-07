@@ -5,7 +5,6 @@ Matches TypeScript src/infra/device-pairing.ts
 
 Provides secure device registration and token-based authentication.
 """
-
 from __future__ import annotations
 
 import json
@@ -19,7 +18,6 @@ from typing import Any
 @dataclass
 class DeviceAuthToken:
     """Device authentication token (matches TS DeviceAuthToken)."""
-
     token: str
     role: str
     scopes: list[str]
@@ -40,7 +38,6 @@ class DeviceAuthToken:
 @dataclass
 class DevicePairingRequest:
     """Pending device pairing request (matches TS DevicePairingPendingRequest)."""
-
     request_id: str
     device_id: str
     public_key: str
@@ -55,7 +52,6 @@ class DevicePairingRequest:
     silent: bool = False
     is_repair: bool = False
     ts: int = field(default_factory=lambda: int(time.time() * 1000))
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON serialization."""
         return asdict(self)
@@ -64,7 +60,6 @@ class DevicePairingRequest:
 @dataclass
 class PairedDevice:
     """Paired device (matches TS PairedDevice)."""
-
     device_id: str
     public_key: str
     display_name: str | None = None
@@ -78,7 +73,6 @@ class PairedDevice:
     tokens: dict[str, DeviceAuthToken] = field(default_factory=dict)
     created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     approved_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON serialization."""
         data = asdict(self)
@@ -91,7 +85,6 @@ class PairedDevice:
 class DevicePairingManager:
     """
     Device pairing manager (matches TS device-pairing.ts).
-
     Handles:
     - Device registration requests
     - Approval/rejection workflow
@@ -131,7 +124,6 @@ class DevicePairingManager:
                         self.pending_by_id[req_id] = DevicePairingRequest(**req_data)
             except Exception:
                 pass
-
         if self.paired_path.exists():
             try:
                 with open(self.paired_path) as f:
@@ -158,14 +150,12 @@ class DevicePairingManager:
         with open(tmp_pending, "w") as f:
             json.dump(pending_data, f, indent=2)
         tmp_pending.replace(self.pending_path)
-
         # Save paired
         paired_data = {k: v.to_dict() for k, v in self.paired_by_device_id.items()}
         tmp_paired = self.paired_path.with_suffix(".tmp")
         with open(tmp_paired, "w") as f:
             json.dump(paired_data, f, indent=2)
         tmp_paired.replace(self.paired_path)
-
     def create_pairing_request(
         self,
         device_id: str,
@@ -178,7 +168,6 @@ class DevicePairingManager:
     ) -> str:
         """
         Create a new pairing request.
-
         Args:
             device_id: Unique device identifier
             public_key: Device public key
@@ -187,12 +176,10 @@ class DevicePairingManager:
             role: Requested role
             scopes: Requested scopes
             remote_ip: Client IP address
-
         Returns:
             Request ID
         """
         request_id = secrets.token_urlsafe(16)
-
         request = DevicePairingRequest(
             request_id=request_id,
             device_id=device_id,
@@ -222,7 +209,6 @@ class DevicePairingManager:
         request = self.pending_by_id.pop(request_id, None)
         if not request:
             return None
-
         # Create paired device
         device = PairedDevice(
             device_id=request.device_id,
@@ -233,7 +219,6 @@ class DevicePairingManager:
             scopes=request.scopes,
             remote_ip=request.remote_ip,
         )
-
         # Generate initial token
         token = self._generate_token()
         device.tokens[request.role or "gateway"] = DeviceAuthToken(
@@ -263,7 +248,6 @@ class DevicePairingManager:
             self._save_state()
             return True
         return False
-
     def validate_token(
         self,
         device_id: str,
@@ -273,13 +257,11 @@ class DevicePairingManager:
     ) -> tuple[bool, str | None]:
         """
         Validate device token.
-
         Args:
             device_id: Device ID
             token: Token to validate
             role: Expected role
             required_scopes: Required scopes
-
         Returns:
             (is_valid, error_reason)
         """
@@ -352,7 +334,6 @@ class DevicePairingManager:
             self._save_state()
             return True
         return False
-
     def list_pending(self) -> list[DevicePairingRequest]:
         """List pending pairing requests."""
         # Clean expired

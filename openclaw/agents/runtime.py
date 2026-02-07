@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Enhanced Agent runtime with multi-provider support
 """
@@ -25,7 +23,7 @@ from .providers import (
     OllamaProvider,
     OpenAIProvider,
     VectorEngineProvider,
-)
+) 
 from .queuing import QueueManager
 from .session import Session
 from .thinking import ThinkingExtractor, ThinkingMode
@@ -76,7 +74,7 @@ class MultiProviderRuntime:
 
     def __init__(
         self,
-        model: str = "anthropic/claude-opus-4-5-20250514",
+        model: str = "google/gemini-1.5-flash",
         api_key: str | None = None,
         base_url: str | None = None,
         max_retries: int = 3,
@@ -265,8 +263,6 @@ class MultiProviderRuntime:
             message: User message
             tools: Optional list of tools
             max_tokens: Maximum tokens to generate
-            images: Optional list of image URLs
-            system_prompt: Optional system prompt (injected at session start)
 
         Yields:
             AgentEvent objects
@@ -642,63 +638,6 @@ class MultiProviderRuntime:
                         # No tools called, can end turn
                         logger.info("✅ No more tool calls. Ending agent turn.")
                         active_loop = False
-
-                # If we need to get a response after tool execution, make another API call
-                if needs_tool_response:
-                    logger.info("Making follow-up API call to get response based on tool results")
-                    
-                    # Rebuild messages with tool results
-                    llm_messages = []
-                    for msg in session.get_messages():
-                        msg_images = getattr(msg, 'images', None)
-                        llm_messages.append(LLMMessage(role=msg.role, content=msg.content, images=msg_images))
-                    
-                    # Add explicit instruction to NOT use tools
-                    # This is a workaround for Gemini's AFC (Automatic Function Calling)
-                    llm_messages.append(LLMMessage(
-                        role="user",
-                        content="Based on the tool results above, please provide a natural language response to the user. Do NOT call any more tools."
-                    ))
-                    
-                    # Reset for second response
-                    accumulated_text = ""
-                    tool_calls = []
-                    
-                    # Stream the final response WITHOUT tools (to prevent infinite loop)
-                    # The model should now generate a text response based on tool results
-                    # IMPORTANT: Pass empty list [] instead of None to truly disable tools
-                    async for response in self.provider.stream(
-                        messages=llm_messages, 
-                        tools=[], 
-                        max_tokens=max_tokens,
-                        **self.extra_params  # Pass enable_search and other params
-                    ):
-                        if response.type == "text_delta":
-                            text = response.content
-                            accumulated_text += text
-                            
-                            # Stream text to user
-                            event = Event(
-                                type=EventType.AGENT_TEXT,
-                                source="agent-runtime",
-                                session_id=session.session_id if session else None,
-                                data={"delta": {"type": "text_delta", "text": text}},
-                            )
-                            await self._notify_observers(event)
-                            yield event
-                            
-                        elif response.type == "done":
-                            # Save final response
-                            if accumulated_text:
-                                session.add_assistant_message(accumulated_text, [])
-                            break
-                            
-                        elif response.type == "error":
-                            raise Exception(response.content)
-                    
-                    # Record success
-                    if self.fallback_manager:
-                        self.fallback_manager.record_success(current_model)
 
                 # Success, exit retry loop
                 event = Event(

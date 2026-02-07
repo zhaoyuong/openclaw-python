@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class BootstrapFile(NamedTuple):
     """Bootstrap file with metadata"""
+
     path: str
     content: str
     truncated: bool = False
@@ -150,6 +151,7 @@ def format_bootstrap_context_string(files: list[BootstrapFile]) -> str:
     """
     if not files:
         return ""
+
     lines = [
         "# Project Context",
         "",

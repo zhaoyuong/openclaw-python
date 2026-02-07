@@ -30,19 +30,6 @@ from typing import Any
 import websockets
 from websockets.server import WebSocketServerProtocol
 
-from openclaw.gateway.auth import (
-    AuthMode,
-    authorize_gateway_connect,
-    is_loopback_address,
-    validate_auth_config,
-)
-from openclaw.gateway.error_codes import (
-    ErrorCode,
-    InvalidRequestError,
-    NotLinkedError,
-    UnavailableError,
-)
-
 from ..config import ClawdbotConfig
 from ..events import Event
 from .channel_manager import ChannelManager, discover_channel_plugins
@@ -200,8 +187,6 @@ class GatewayServer:
         config: ClawdbotConfig,
         agent_runtime=None,
         session_manager=None,
-        tools=None,
-        system_prompt: str | None = None,
         auto_discover_channels: bool = False,
     ):
         """
@@ -211,8 +196,6 @@ class GatewayServer:
             config: Gateway configuration
             agent_runtime: AgentRuntime instance (shared with channels)
             session_manager: SessionManager for managing sessions
-            tools: List of tools available to the agent
-            system_prompt: Optional system prompt (skills, capabilities)
             auto_discover_channels: If True, auto-discover and register channel plugins
         """
         self.config = config
@@ -220,15 +203,11 @@ class GatewayServer:
         self.running = False
         self.agent_runtime = agent_runtime
         self.session_manager = session_manager
-        self.tools = tools or []
-        self.system_prompt = system_prompt
 
         # Create ChannelManager
         self.channel_manager = ChannelManager(
             default_runtime=agent_runtime,
             session_manager=session_manager,
-            tools=self.tools,
-            system_prompt=self.system_prompt,
         )
 
         # Register as observer if agent_runtime provided

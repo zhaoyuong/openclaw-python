@@ -167,7 +167,6 @@ class RuntimeEnv:
 
         # Build or use system prompt
         system_prompt = self.custom_prompt or self.system_message
-
         # If no custom prompt, build a proper one using the new architecture
         if not system_prompt:
             try:
@@ -198,7 +197,6 @@ class RuntimeEnv:
                     runtime_info=runtime_info,
                     context_files=context_files,
                 )
-
                 logger.debug(f"Built system prompt for {session_id} ({len(system_prompt)} chars)")
             except Exception as e:
                 logger.warning(f"Failed to build system prompt: {e}")

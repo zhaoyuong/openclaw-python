@@ -29,6 +29,7 @@ Section order matches TypeScript src/agents/system-prompt.ts buildAgentSystemPro
  25. Heartbeats
  26. Runtime
 """
+
 from __future__ import annotations
 
 import logging
@@ -339,6 +340,7 @@ def _is_soul_file(file: dict) -> bool:
 # ──────────────────────────────────────────────────────────────────────
 # Skills formatter (unchanged – already matches TS XML format)
 # ──────────────────────────────────────────────────────────────────────
+
 
 def format_skills_for_prompt(skills: list[dict]) -> str:
     """

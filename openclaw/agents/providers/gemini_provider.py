@@ -335,29 +335,6 @@ class GeminiProvider(LLMProvider):
                     full_text.append(chunk.text)
                     yield LLMResponse(type="text_delta", content=chunk.text)
                     await asyncio.sleep(0.01)  # Yield control to event loop
-                
-                # Handle function calls
-                if hasattr(chunk, 'candidates') and chunk.candidates:
-                    for candidate in chunk.candidates:
-                        if hasattr(candidate, 'content') and candidate.content:
-                            # Check if parts exists and is not None
-                            if hasattr(candidate.content, 'parts') and candidate.content.parts:
-                                for part in candidate.content.parts:
-                                    if hasattr(part, 'function_call') and part.function_call:
-                                        fc = part.function_call
-                                        tool_call = {
-                                            "id": f"call_{fc.name}_{len(tool_calls)}",
-                                            "name": fc.name,
-                                            "arguments": dict(fc.args) if fc.args else {}
-                                        }
-                                        tool_calls.append(tool_call)
-                                        logger.info(f"Gemini function call: {fc.name}")
-
-            logger.info(f"Gemini stream complete: {chunk_count} chunks, {len(full_text)} text parts, {len(tool_calls)} tool calls")
-
-            # Send tool calls if any
-            if tool_calls:
-                yield LLMResponse(type="tool_call", content=None, tool_calls=tool_calls)
 
                 # Handle function calls
                 if hasattr(chunk, "candidates") and chunk.candidates:
@@ -382,8 +359,6 @@ class GeminiProvider(LLMProvider):
 
             # Send completion
             complete_text = "".join(full_text)
-            if not complete_text and not tool_calls:
-                logger.warning(f"⚠️ Gemini returned empty response (no text and no tool calls)")
             yield LLMResponse(type="done", content=complete_text)
 
         except Exception as e:

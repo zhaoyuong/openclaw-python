@@ -29,6 +29,7 @@ def build_system_prompt_params(
         config: OpenClaw configuration dict
         workspace_dir: Workspace directory
         runtime: Runtime information dict (optional override)
+
     Returns:
         Dict with keys:
         - user_timezone: str | None
@@ -76,6 +77,7 @@ def get_runtime_info(
         agent_id: Agent identifier (optional)
         model: Model name (optional)
         channel: Channel name (optional)
+
     Returns:
         Dict with runtime information:
         - agent_id: str | None
@@ -132,12 +134,14 @@ def resolve_repo_root(start_dir: Path) -> Path | None:
                 return current
         except Exception as e:
             logger.debug(f"Error checking .git at {current}: {e}")
+
         # Move to parent
         parent = current.parent
         if parent == current:
             # Reached filesystem root
             break
         current = parent
+
     logger.debug(f"No git root found starting from {start_dir}")
     return None
 
@@ -167,4 +171,5 @@ def resolve_user_timezone(timezone_config: str | None) -> str | None:
         except Exception:
             pass
         return None
+
     return timezone

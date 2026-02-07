@@ -3,6 +3,7 @@ Command authorization and owner verification
 
 Matches TypeScript src/auto-reply/command-auth.ts
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class CommandAuthorization(NamedTuple):
     """Result of command authorization (matches TS CommandAuthorization)."""
+
     provider_id: str | None
     owner_list: list[str]
     sender_id: str | None
@@ -31,44 +33,44 @@ def resolve_sender_candidates(
 ) -> list[str]:
     """
     Resolve sender candidates for owner matching (matches TS resolveSenderCandidates).
-    
+
     Returns a list of identifiers to check against owner list:
     - Provider-prefixed ID (telegram:123, discord:456)
     - E.164 phone number (+1234567890)
     - From field
-    
+
     Args:
         sender_id: Sender ID from channel
         sender_e164: E.164 phone number
         from_: From field
         provider_id: Channel provider ID
         account_id: Account ID
-    
+
     Returns:
         List of candidate identifiers
     """
     candidates: list[str] = []
-    
+
     # 1. Provider-prefixed sender ID
     if sender_id and provider_id:
         candidates.append(f"{provider_id.lower()}:{sender_id}")
-    
+
     # 2. Plain sender ID
     if sender_id:
         candidates.append(sender_id)
-    
+
     # 3. E.164 phone number
     if sender_e164:
         e164 = sender_e164.strip()
         if e164.startswith("+"):
             candidates.append(e164)
-    
+
     # 4. From field
     if from_:
         from_trimmed = from_.strip()
         if from_trimmed:
             candidates.append(from_trimmed)
-    
+
     return candidates
 
 
@@ -84,13 +86,13 @@ def resolve_command_authorization(
 ) -> CommandAuthorization:
     """
     Resolve command authorization (simplified version of TS resolveCommandAuthorization).
-    
+
     Logic (matches TS lines 168-269):
     1. Resolve sender candidates
     2. Match against owner list
     3. Determine if sender is owner
     4. Determine if sender is authorized
-    
+
     Args:
         sender_id: Sender identifier
         sender_e164: E.164 phone number
@@ -100,7 +102,7 @@ def resolve_command_authorization(
         enforce_owner_for_commands: Whether to enforce owner-only commands
         provider_id: Channel provider ID
         account_id: Account ID
-    
+
     Returns:
         CommandAuthorization result
     """
@@ -112,11 +114,11 @@ def resolve_command_authorization(
         provider_id=provider_id,
         account_id=account_id,
     )
-    
+
     # Check if owner allowlist configured
-    allow_all = "*" in owner_list if owner_list else True
+    allow_all = "*" in owner_list if owner_list else False
     owner_list_configured = len(owner_list) > 0 and not allow_all
-    
+
     # Match sender against owner list
     matched_sender = None
     if owner_list_configured:
@@ -124,28 +126,26 @@ def resolve_command_authorization(
             if candidate in owner_list:
                 matched_sender = candidate
                 break
-    
+
     sender_is_owner = matched_sender is not None
-    
+
     # Determine authorization
-    require_owner = enforce_owner_for_commands or owner_list_configured
-    
-    if not require_owner:
-        # No owner requirement
+    # Only enforce owner requirement when explicitly requested via enforce_owner_for_commands
+    if not enforce_owner_for_commands:
         is_authorized = True
-    elif allow_all:
-        # Wildcard allowlist
-        is_authorized = True
-    elif owner_list_configured:
-        # Explicit owner list
-        is_authorized = sender_is_owner
     else:
-        # Default: allow
-        is_authorized = True
-    
+        if allow_all:
+            is_authorized = True
+        elif owner_list_configured:
+            is_authorized = sender_is_owner
+        else:
+            is_authorized = True
+
     # Resolve final sender ID
-    final_sender_id = matched_sender if matched_sender else (sender_candidates[0] if sender_candidates else None)
-    
+    final_sender_id = (
+        matched_sender if matched_sender else (sender_candidates[0] if sender_candidates else None)
+    )
+
     return CommandAuthorization(
         provider_id=provider_id,
         owner_list=owner_list,
@@ -165,24 +165,24 @@ def check_owner_permission(
 ) -> bool:
     """
     Simple owner check (quick utility).
-    
+
     Args:
         sender_id: Sender ID
         sender_e164: E.164 phone number
         owner_list: Owner list
         provider_id: Provider ID
-    
+
     Returns:
         True if sender is owner
     """
     if "*" in owner_list:
         return True
-    
+
     candidates = resolve_sender_candidates(
         sender_id=sender_id,
         sender_e164=sender_e164,
         from_=None,
         provider_id=provider_id,
     )
-    
+
     return any(c in owner_list for c in candidates)
