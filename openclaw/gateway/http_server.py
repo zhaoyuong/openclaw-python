@@ -19,7 +19,7 @@ class ControlUIServer:
         self.gateway = gateway
         self.base_path = base_path.rstrip("/")
         self.ui_port = ui_port
-        self.ui_dir = Path(__file__).parent.parent / "web" / "static" / "control-ui"
+        self.ui_dir = Path(__file__).parent.parent / "static" / "control-ui"
         
         self.app = FastAPI(
             title="OpenClaw Control UI",

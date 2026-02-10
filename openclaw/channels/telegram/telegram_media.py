@@ -257,3 +257,237 @@ class TelegramMediaHandler:
         data_url = f"data:{mime};base64,{b64_data}"
         
         return data_url, media_info
+
+
+async def send_media_message(
+    bot,
+    chat_id: int,
+    media_url: str,
+    caption: Optional[str] = None,
+    gif_playback: bool = False,
+    thread_id: Optional[int] = None,
+    reply_to_message_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Send media with automatic type detection
+    
+    Matches TypeScript Telegram media sending logic
+    
+    Args:
+        bot: Telegram bot instance
+        chat_id: Chat ID
+        media_url: Media URL or file path
+        caption: Optional caption
+        gif_playback: If True, send GIFs as animations
+        thread_id: Optional thread/topic ID
+        reply_to_message_id: Optional message to reply to
+        
+    Returns:
+        Dict with success, message_id, etc.
+    """
+    from ...media.web_loader import load_web_media, detect_media_type, is_gif
+    
+    try:
+        # Load media
+        media = await load_web_media(media_url, max_bytes=50_000_000)
+        mime_type = media["mime_type"]
+        data = media["data"]
+        
+        # Split caption if too long
+        if caption:
+            caption, follow_up_text = split_telegram_caption(caption)
+        else:
+            follow_up_text = None
+        
+        # Prepare common parameters
+        kwargs = {}
+        if caption:
+            kwargs["caption"] = caption
+            kwargs["parse_mode"] = "HTML"
+        if thread_id:
+            kwargs["message_thread_id"] = thread_id
+        if reply_to_message_id:
+            kwargs["reply_to_message_id"] = reply_to_message_id
+        
+        # Determine send method based on MIME type
+        media_type = detect_media_type(data, mime_type)
+        message = None
+        
+        if media_type == "image":
+            if gif_playback and is_gif(mime_type, media_url):
+                message = await bot.send_animation(
+                    chat_id,
+                    BytesIO(data),
+                    **kwargs
+                )
+            else:
+                message = await bot.send_photo(
+                    chat_id,
+                    BytesIO(data),
+                    **kwargs
+                )
+        
+        elif media_type == "video":
+            message = await bot.send_video(
+                chat_id,
+                BytesIO(data),
+                **kwargs
+            )
+        
+        elif media_type == "audio":
+            # Check if should send as voice
+            if "voice" in media_url.lower() or mime_type == "audio/ogg":
+                message = await bot.send_voice(
+                    chat_id,
+                    BytesIO(data),
+                    **kwargs
+                )
+            else:
+                message = await bot.send_audio(
+                    chat_id,
+                    BytesIO(data),
+                    **kwargs
+                )
+        
+        else:
+            # Send as document
+            message = await bot.send_document(
+                chat_id,
+                BytesIO(data),
+                **kwargs
+            )
+        
+        result = {
+            "success": True,
+            "message_id": message.message_id if message else None,
+            "delivered_count": 1,
+        }
+        
+        # Send follow-up text if caption was split
+        if follow_up_text:
+            follow_up = await bot.send_message(
+                chat_id,
+                follow_up_text,
+                parse_mode="HTML",
+                message_thread_id=thread_id,
+            )
+            result["delivered_count"] = 2
+            result["follow_up_message_id"] = follow_up.message_id
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Failed to send media: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+def split_telegram_caption(caption: str, limit: int = 1024) -> Tuple[str, Optional[str]]:
+    """
+    Split caption if too long
+    
+    Telegram has a 1024 character limit for media captions.
+    Matches TypeScript splitTelegramCaption()
+    
+    Args:
+        caption: Full caption text
+        limit: Character limit
+        
+    Returns:
+        (caption, follow_up_text) tuple
+    """
+    if len(caption) <= limit:
+        return caption, None
+    
+    # Try to split at sentence boundary
+    split_at = caption.rfind(".", 0, limit)
+    
+    # If no sentence boundary, try newline
+    if split_at == -1:
+        split_at = caption.rfind("\n", 0, limit)
+    
+    # If still no good split point, just split at limit
+    if split_at == -1:
+        split_at = limit
+    
+    main_caption = caption[:split_at].rstrip()
+    follow_up = caption[split_at:].lstrip(". \n")
+    
+    logger.info(f"Split caption: {len(main_caption)} + {len(follow_up)} chars")
+    
+    return main_caption, follow_up if follow_up else None
+
+
+async def send_media_group(
+    bot,
+    chat_id: int,
+    media_urls: list[str],
+    caption: Optional[str] = None,
+    thread_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Send multiple media as a group (album)
+    
+    Matches TypeScript media group sending
+    
+    Args:
+        bot: Telegram bot instance
+        chat_id: Chat ID
+        media_urls: List of media URLs
+        caption: Caption for first media
+        thread_id: Optional thread ID
+        
+    Returns:
+        Delivery result dict
+    """
+    from telegram import InputMediaPhoto, InputMediaVideo
+    from ...media.web_loader import load_web_media, detect_media_type
+    
+    if len(media_urls) > 10:
+        logger.warning("Telegram media group limited to 10 items")
+        media_urls = media_urls[:10]
+    
+    media_group = []
+    
+    for idx, url in enumerate(media_urls):
+        try:
+            media = await load_web_media(url)
+            mime_type = media["mime_type"]
+            data = BytesIO(media["data"])
+            
+            # Add caption to first item only
+            item_caption = caption if idx == 0 else None
+            
+            if mime_type.startswith("image/"):
+                media_group.append(
+                    InputMediaPhoto(data, caption=item_caption, parse_mode="HTML")
+                )
+            elif mime_type.startswith("video/"):
+                media_group.append(
+                    InputMediaVideo(data, caption=item_caption, parse_mode="HTML")
+                )
+        
+        except Exception as e:
+            logger.error(f"Failed to load media {url}: {e}")
+    
+    if not media_group:
+        return {"success": False, "error": "No valid media to send"}
+    
+    try:
+        kwargs = {}
+        if thread_id:
+            kwargs["message_thread_id"] = thread_id
+        
+        messages = await bot.send_media_group(chat_id, media_group, **kwargs)
+        
+        return {
+            "success": True,
+            "message_ids": [m.message_id for m in messages],
+            "delivered_count": len(messages),
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to send media group: {e}")
+        return {"success": False, "error": str(e)}
