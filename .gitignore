@@ -43,6 +43,8 @@ ENV/
 # IDE
 .vscode/
 .idea/
+.cursor/
+.clawdbot/
 *.swp
 *.swo
 *~

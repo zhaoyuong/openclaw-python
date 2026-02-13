@@ -1,5 +1,0 @@
-{
-  "model": "anthropic/claude-sonnet-4-5",
-  "thinking_mode": "stream",
-  "enable_queuing": true
-}
