@@ -1,4 +1,4 @@
-# 🦞 OpenClaw Python
+# OpenJavis（🦞 OpenClaw-Python）
 
 > **OpenClaw is great, but I also need Python!**  
 > _A full-featured Python implementation of the OpenClaw AI assistant platform_
@@ -6,7 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**OpenClaw Python** is a complete Python port of OpenClaw, connecting messaging channels (Telegram, Discord, Slack) with AI models (Claude, GPT, Gemini). Built with Python's strengths for clarity and maintainability—because sometimes TypeScript just won't do, and Python's what you need to get through!
+OpenJavis **OpenClaw Python** is a complete Python port of OpenClaw, connecting messaging channels (Telegram, Discord, Slack) with AI models (Claude, GPT, Gemini). Built with Python's strengths for clarity and maintainability—because sometimes TypeScript just won't do, and Python's what you need to get through!
 
 ## ✨ Features
 
