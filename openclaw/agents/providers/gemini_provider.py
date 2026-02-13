@@ -3,6 +3,8 @@ Google Gemini provider implementation using google.genai SDK (NEW API)
 
 Based on: https://ai.google.dev/gemini-api/docs/quickstart
 """
+from __future__ import annotations
+
 
 import asyncio
 import logging
@@ -182,6 +184,18 @@ class GeminiProvider(LLMProvider):
             if not contents:
                 logger.warning("No messages to send to Gemini")
                 return
+            
+            # DEBUG: Log the actual messages being sent
+            logger.info(f"📨 Sending {len(contents)} message(s) to Gemini")
+            for idx, content in enumerate(contents):
+                logger.info(f"  Message {idx}: role={content.role}, parts={len(content.parts) if hasattr(content, 'parts') and content.parts else 0}")
+                if hasattr(content, 'parts') and content.parts:
+                    for part_idx, part in enumerate(content.parts[:2]):  # Log first 2 parts
+                        if hasattr(part, 'text') and part.text:
+                            text_preview = part.text[:100] if len(part.text) > 100 else part.text
+                            logger.info(f"    Part {part_idx}: text={repr(text_preview)}")
+            if system_instruction:
+                logger.info(f"  System instruction: {repr(system_instruction[:100]) if len(system_instruction) > 100 else repr(system_instruction)}")
 
             # Build generation config
             config_params = {}
@@ -220,10 +234,17 @@ class GeminiProvider(LLMProvider):
             
             if gemini_tools:
                 config_params["tools"] = gemini_tools
-            
-            # CRITICAL: Disable Automatic Function Calling when tools is empty or None
-            # This prevents Gemini from inventing function calls
-            if (tools is None or tools == []) and not kwargs.get("enable_search"):
+                # When tools are provided, set mode to AUTO to allow Gemini to choose
+                # whether to call functions or return text
+                config_params["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode=types.FunctionCallingConfigMode.AUTO
+                    )
+                )
+                logger.info(f"🔧 Tool config set to AUTO with {len(function_declarations)} tools")
+            else:
+                # CRITICAL: Disable Automatic Function Calling when tools is empty or None
+                # This prevents Gemini from inventing function calls
                 config_params["tool_config"] = types.ToolConfig(
                     function_calling_config=types.FunctionCallingConfig(
                         mode=types.FunctionCallingConfigMode.NONE
@@ -255,8 +276,29 @@ class GeminiProvider(LLMProvider):
             tool_calls = []
             chunk_count = 0
             
+            # Check for prompt feedback (blocking)
+            if hasattr(stream_response, 'prompt_feedback'):
+                feedback = stream_response.prompt_feedback
+                logger.info(f"🛡️  Prompt feedback: {feedback}")
+                if hasattr(feedback, 'block_reason') and feedback.block_reason:
+                    logger.warning(f"❌ Content blocked: {feedback.block_reason}")
+            
             async for chunk in stream_response:
                 chunk_count += 1
+                
+                # Check for prompt-level blocking first
+                if hasattr(chunk, 'prompt_feedback') and chunk.prompt_feedback:
+                    feedback = chunk.prompt_feedback
+                    if hasattr(feedback, 'block_reason') and feedback.block_reason:
+                        logger.error(f"❌ CONTENT BLOCKED: {feedback.block_reason}")
+                        if hasattr(feedback, 'safety_ratings'):
+                            logger.error(f"   Safety ratings: {feedback.safety_ratings}")
+                        # Yield error instead of continuing silently
+                        yield LLMResponse(
+                            type="error",
+                            content=f"Content blocked by safety filter: {feedback.block_reason}"
+                        )
+                        return
                 
                 # DETAILED DEBUGGING: Log full chunk structure
                 logger.info(f"━━━ Gemini chunk {chunk_count} ━━━")
@@ -271,6 +313,15 @@ class GeminiProvider(LLMProvider):
                         if hasattr(candidate, 'finish_reason'):
                             finish_reason = candidate.finish_reason
                             logger.info(f"    finish_reason: {finish_reason}")
+                        
+                        # Check for safety ratings (content filtering)
+                        if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
+                            logger.info(f"    safety_ratings: {candidate.safety_ratings}")
+                        
+                        # Check for block reason
+                        if hasattr(chunk, 'prompt_feedback'):
+                            logger.info(f"  prompt_feedback: {chunk.prompt_feedback}")
+                        
                         if hasattr(candidate, 'content'):
                             logger.info(f"    has_content: {bool(candidate.content)}")
                             if candidate.content and hasattr(candidate.content, 'parts'):
@@ -317,6 +368,11 @@ class GeminiProvider(LLMProvider):
             complete_text = "".join(full_text)
             if not complete_text and not tool_calls:
                 logger.warning(f"⚠️ Gemini returned empty response (no text and no tool calls)")
+                logger.warning(f"Possible reasons:")
+                logger.warning(f"  1. Content may have triggered safety filters")
+                logger.warning(f"  2. Too many images ({len([m for m in messages if m.images])} messages with images)")
+                logger.warning(f"  3. Context length exceeded")
+                logger.warning(f"Suggestion: Try with fewer images (max 10) or simpler prompt")
             yield LLMResponse(type="done", content=complete_text)
 
         except Exception as e:

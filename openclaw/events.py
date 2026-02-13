@@ -50,19 +50,55 @@ class EventType(str, Enum):
     Unified event types
 
     Naming convention: <component>.<action>
+    Matches TypeScript event types for compatibility
     """
 
     # ========================================================================
-    # Agent Events
+    # Agent Turn Events (matches TypeScript agent-loop)
+    # ========================================================================
+    TURN_START = "turn_start"
+    TURN_END = "turn_end"
+    TURN_ABORTED = "turn_aborted"
+    AGENT_END = "agent_end"
+    
+    # ========================================================================
+    # Message Events (streaming)
+    # ========================================================================
+    MESSAGE_START = "message_start"
+    MESSAGE_UPDATE = "message_update"
+    MESSAGE_END = "message_end"
+    
+    # ========================================================================
+    # Tool Execution Events
+    # ========================================================================
+    TOOL_EXECUTION_START = "tool_execution_start"
+    TOOL_EXECUTION_UPDATE = "tool_execution_update"
+    TOOL_EXECUTION_END = "tool_execution_end"
+    
+    # ========================================================================
+    # Thinking Events
+    # ========================================================================
+    THINKING_START = "thinking_start"
+    THINKING_UPDATE = "thinking_update"
+    THINKING_END = "thinking_end"
+    
+    # ========================================================================
+    # Legacy Agent Events (backwards compatibility)
     # ========================================================================
     AGENT_STARTED = "agent.started"
     AGENT_TEXT = "agent.text"
     AGENT_THINKING = "agent.thinking"
     AGENT_TOOL_USE = "agent.tool_use"
     AGENT_TOOL_RESULT = "agent.tool_result"
+    AGENT_FILE_GENERATED = "agent.file_generated"
     AGENT_TURN_COMPLETE = "agent.turn_complete"
     AGENT_ERROR = "agent.error"
     AGENT_STOPPED = "agent.stopped"
+    
+    # ========================================================================
+    # File Events
+    # ========================================================================
+    FILE_GENERATED = "file_generated"
 
     # ========================================================================
     # Channel Events

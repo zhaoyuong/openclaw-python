@@ -16,17 +16,24 @@ from .connection import (
     HealthChecker,
     ReconnectConfig,
 )
-from .discord import DiscordChannel
-from .enhanced_discord import EnhancedDiscordChannel
-
-# Enhanced versions
-from .enhanced_telegram import EnhancedTelegramChannel
 from .registry import ChannelRegistry, get_channel, get_channel_registry, register_channel
-from .slack import SlackChannel
-
-# Import channel implementations
-from .telegram import TelegramChannel
 from .webchat import WebChatChannel
+
+# Import channel implementations conditionally
+try:
+    from .discord import DiscordChannel
+except ImportError:
+    DiscordChannel = None
+
+try:
+    from .slack import SlackChannel  
+except ImportError:
+    SlackChannel = None
+
+try:
+    from .telegram import TelegramChannel
+except ImportError:
+    TelegramChannel = None
 
 __all__ = [
     # Base classes
@@ -47,10 +54,13 @@ __all__ = [
     "ReconnectConfig",
     "HealthChecker",
     # Channels
-    "TelegramChannel",
-    "DiscordChannel",
-    "SlackChannel",
     "WebChatChannel",
-    "EnhancedTelegramChannel",
-    "EnhancedDiscordChannel",
 ]
+
+# Add optional channels to __all__ if they loaded
+if TelegramChannel:
+    __all__.append("TelegramChannel")
+if DiscordChannel:
+    __all__.append("DiscordChannel")
+if SlackChannel:
+    __all__.append("SlackChannel")

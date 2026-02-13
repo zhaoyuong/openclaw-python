@@ -1,4 +1,6 @@
 """WebChat channel (Gateway WebSocket)"""
+from __future__ import annotations
+
 
 import logging
 from datetime import UTC, datetime, timezone

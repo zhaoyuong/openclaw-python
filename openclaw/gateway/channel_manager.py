@@ -14,17 +14,31 @@ Architecture:
                 ├── Discord Channel (plugin)
                 └── ... other channels
 """
+from __future__ import annotations
+
 
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from ..agents.runtime import AgentRuntime
 from ..channels.base import ChannelPlugin, InboundMessage, MessageHandler
 from ..events import Event, EventType
+
+# Channel event type constants
+class ChannelEventType:
+    """Channel-specific event types"""
+    REGISTERED = "registered"
+    UNREGISTERED = "unregistered"
+    STARTING = "starting"
+    STARTED = "started"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    ERROR = "error"
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +206,7 @@ class ChannelManager:
         )
 
         logger.info(f"Registered channel class: {channel_id}")
-        asyncio.create_task(self._emit_event("registered", channel_id, {}))
+        asyncio.create_task(self._emit_event(ChannelEventType.REGISTERED, channel_id, {}))
 
     def register_instance(
         self,
@@ -245,7 +259,7 @@ class ChannelManager:
         self._runtime_envs.pop(channel_id, None)
 
         logger.info(f"Unregistered channel: {channel_id}")
-        asyncio.create_task(self._emit_event("unregistered", channel_id, {}))
+        asyncio.create_task(self._emit_event(ChannelEventType.UNREGISTERED, channel_id, {}))
         return True
 
     # =========================================================================
@@ -346,7 +360,7 @@ class ChannelManager:
 
         try:
             env.state = ChannelState.STARTING
-            await self._emit_event("starting", channel_id, {})
+            await self._emit_event(ChannelEventType.STARTING, channel_id, {})
 
             # Set up message handler
             handler = self._create_message_handler(channel_id)
@@ -363,14 +377,14 @@ class ChannelManager:
             env.started_at = datetime.now().isoformat()
 
             logger.info(f"✅ Channel started: {channel_id}")
-            await self._emit_event("started", channel_id, {})
+            await self._emit_event(ChannelEventType.STARTED, channel_id, {})
             return True
 
         except Exception as e:
             env.state = ChannelState.ERROR
             env.error = str(e)
             logger.error(f"❌ Failed to start channel {channel_id}: {e}")
-            await self._emit_event("error", channel_id, {"error": str(e)})
+            await self._emit_event(ChannelEventType.ERROR, channel_id, {"error": str(e)})
             return False
 
     async def stop_channel(self, channel_id: str) -> bool:
@@ -392,7 +406,7 @@ class ChannelManager:
         if env:
             env.state = ChannelState.STOPPING
 
-        await self._emit_event("stopping", channel_id, {})
+        await self._emit_event(ChannelEventType.STOPPING, channel_id, {})
 
         try:
             await channel.stop()
@@ -401,7 +415,7 @@ class ChannelManager:
                 env.state = ChannelState.STOPPED
 
             logger.info(f"Channel stopped: {channel_id}")
-            await self._emit_event("stopped", channel_id, {})
+            await self._emit_event(ChannelEventType.STOPPED, channel_id, {})
             return True
 
         except Exception as e:
@@ -409,7 +423,7 @@ class ChannelManager:
                 env.state = ChannelState.ERROR
                 env.error = str(e)
             logger.error(f"Failed to stop channel {channel_id}: {e}")
-            await self._emit_event("error", channel_id, {"error": str(e)})
+            await self._emit_event(ChannelEventType.ERROR, channel_id, {"error": str(e)})
             return False
 
     async def restart_channel(self, channel_id: str) -> bool:
@@ -485,6 +499,53 @@ class ChannelManager:
     def list_enabled(self) -> list[str]:
         """List enabled channel IDs"""
         return [ch_id for ch_id, env in self._runtime_envs.items() if env.enabled]
+
+    def get_all_channels(self) -> list[dict[str, Any]]:
+        """
+        Get all channels with full details
+        
+        Returns list of channel info dicts with:
+        - id: channel ID
+        - label: channel label
+        - running: whether channel is running
+        - connected: whether channel is connected
+        - healthy: whether channel is healthy
+        - state: channel state
+        - enabled: whether channel is enabled
+        - capabilities: channel capabilities
+        """
+        channels = []
+        for channel_id in self.list_channels():
+            channel = self._channels.get(channel_id)
+            env = self._runtime_envs.get(channel_id)
+            
+            channel_info = {
+                "id": channel_id,
+                "enabled": env.enabled if env else False,
+                "state": env.state.value if env else "unknown",
+            }
+            
+            if channel:
+                channel_info.update({
+                    "label": channel.label,
+                    "running": channel.is_running(),
+                    "connected": channel.is_connected(),
+                    "healthy": channel.is_healthy(),
+                    "capabilities": channel.capabilities.model_dump(),
+                })
+            else:
+                # Channel class registered but not instantiated
+                channel_info.update({
+                    "label": channel_id,
+                    "running": False,
+                    "connected": False,
+                    "healthy": False,
+                    "capabilities": {},
+                })
+            
+            channels.append(channel_info)
+        
+        return channels
 
     def get_status(self, channel_id: str) -> dict[str, Any] | None:
         """Get channel status"""
@@ -602,6 +663,8 @@ class ChannelManager:
         Create message handler for a channel
 
         This is where the magic happens:
+        - Builds complete MsgContext from InboundMessage
+        - Normalizes and finalizes context (sender metadata, mention gating, etc.)
         - Gets the appropriate AgentRuntime (channel-specific or default)
         - Creates a handler that processes messages through the Agent
         - Sends responses back via the channel
@@ -630,27 +693,76 @@ class ChannelManager:
             logger.info(f"📨 [{channel_id}] Message from {message.sender_name}: {message.text}")
 
             try:
-                # Get or create session
+                # Build MsgContext from InboundMessage
+                from openclaw.auto_reply.inbound_context import (
+                    MsgContext,
+                    finalize_inbound_context,
+                    build_session_key_from_context,
+                )
+                
+                # Construct MsgContext with all metadata
                 session_id = f"{channel_id}-{message.chat_id}"
-                session = None
+                
+                ctx = MsgContext(
+                    Body=message.text or "",
+                    RawBody=message.text or "",
+                    SessionKey=session_id,
+                    From=message.sender_id,
+                    To=channel_id,
+                    ChatType=message.chat_type,
+                    SenderName=message.sender_name,
+                    SenderId=message.sender_id,
+                    ConversationLabel=f"{channel_id}:{message.chat_id}",
+                    OriginatingChannel=channel_id,
+                    OriginatingTo=message.chat_id,
+                )
+                
+                # Add reply context if present
+                if message.reply_to:
+                    ctx.ReplyToId = message.reply_to
+                
+                # Add media metadata if present
+                if message.metadata:
+                    media_url = message.metadata.get("file_url") or message.metadata.get("photo_url")
+                    if media_url:
+                        ctx.MediaUrls = [media_url]
+                        ctx.MediaUrl = media_url
+                
+                # Finalize context (applies normalization, sender metadata, etc.)
+                ctx = finalize_inbound_context(ctx)
+                
+                logger.debug(f"[{channel_id}] Context finalized: BodyForAgent length={len(ctx.BodyForAgent or '')}, ChatType={ctx.ChatType}")
 
+                # Get or create session
+                session = None
                 if self.session_manager:
                     session = self.session_manager.get_session(session_id)
                     logger.info(f"[{channel_id}] Session created/retrieved: {session_id}")
+                    
+                    # Resolve session workspace for file generation
+                    from openclaw.agents.session_workspace import resolve_session_workspace_dir
+                    session_workspace = resolve_session_workspace_dir(
+                        workspace_root=session.workspace_dir if session else Path.home() / ".openclaw" / "workspace",
+                        session_key=session_id
+                    )
+                    logger.info(f"[{channel_id}] Session workspace: {session_workspace}")
 
                 # Process through Agent Runtime
                 response_text = ""
                 logger.info(f"[{channel_id}] Starting runtime.run_turn with {len(self.tools)} tools")
 
-                # Extract photo URL from metadata if present
+                # Extract images from context
                 images = None
-                if message.metadata and message.metadata.get("photo_url"):
-                    images = [message.metadata["photo_url"]]
-                    logger.info(f"[{channel_id}] Including photo in request: {images[0][:80]}...")
+                if ctx.MediaUrls:
+                    images = ctx.MediaUrls
+                    logger.info(f"[{channel_id}] Including {len(images)} media item(s) in request")
 
+                # Use BodyForAgent (properly formatted with sender metadata for groups)
+                message_text = ctx.BodyForAgent or ctx.Body
+                
                 async for event in runtime.run_turn(
                     session, 
-                    message.text, 
+                    message_text, 
                     tools=self.tools, 
                     images=images,
                     system_prompt=self.system_prompt
@@ -665,6 +777,26 @@ class ChannelManager:
                             delta_text = event.data.get("delta", {}).get("text", "")
                             response_text += delta_text
                             logger.debug(f"[{channel_id}] Text delta: {delta_text[:50]}...")
+                        elif event_type_value == "agent.file_generated":
+                            # Handle file generated event - send file to user
+                            file_path = event.data.get("file_path")
+                            file_type = event.data.get("file_type", "document")
+                            caption = event.data.get("caption", "")
+                            
+                            if file_path and Path(file_path).exists():
+                                logger.info(f"[{channel_id}] Sending generated file: {file_path}")
+                                try:
+                                    await channel.send_media(
+                                        target=message.chat_id,
+                                        media_url=file_path,
+                                        media_type=file_type,
+                                        caption=caption
+                                    )
+                                    logger.info(f"📎 [{channel_id}] Sent file to {message.chat_id}: {Path(file_path).name}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send file: {e}", exc_info=True)
+                            else:
+                                logger.warning(f"[{channel_id}] File not found or path missing: {file_path}")
                         elif event_type_value == "agent.turn_complete" or event_type_value == "turn_complete":
                             logger.info(f"[{channel_id}] Turn complete")
                             break

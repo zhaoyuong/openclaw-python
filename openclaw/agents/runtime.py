@@ -74,7 +74,7 @@ class MultiProviderRuntime:
 
     def __init__(
         self,
-        model: str = "anthropic/claude-opus-4-5-20250514",
+        model: str = "google/gemini-3-pro-preview",
         api_key: str | None = None,
         base_url: str | None = None,
         max_retries: int = 3,
@@ -143,6 +143,12 @@ class MultiProviderRuntime:
 
         # Observer pattern: event listeners (e.g., Gateway)
         self.event_listeners: list = []
+        
+        # AgentLoop-style features
+        self.steering_queue: list[str] = []  # Interrupt current turn with these messages
+        self.followup_queue: list[str] = []  # Process these messages after current turn
+        self.convert_to_llm_hook: Callable | None = None  # Message conversion hook
+        self.transform_context_hook: Callable | None = None  # Context transformation hook
 
     def _parse_model(self, model: str) -> tuple[str, str]:
         """
@@ -184,6 +190,46 @@ class MultiProviderRuntime:
         if listener in self.event_listeners:
             self.event_listeners.remove(listener)
             logger.debug(f"Removed event listener: {listener}")
+    
+    def add_steering_message(self, message: str):
+        """
+        Add a steering message to interrupt the current turn.
+        Steering messages are processed immediately, interrupting the current turn.
+        
+        Args:
+            message: Message to add to steering queue
+        """
+        self.steering_queue.append(message)
+        logger.debug(f"Added steering message: {message[:50]}...")
+    
+    def add_followup_message(self, message: str):
+        """
+        Add a follow-up message to be processed after the current turn.
+        Follow-up messages are queued and processed in order after turn completion.
+        
+        Args:
+            message: Message to add to follow-up queue
+        """
+        self.followup_queue.append(message)
+        logger.debug(f"Added follow-up message: {message[:50]}...")
+    
+    def check_steering(self) -> str | None:
+        """
+        Check if there are steering messages to process.
+        Returns the next steering message if available.
+        """
+        if self.steering_queue:
+            return self.steering_queue.pop(0)
+        return None
+    
+    def check_followup(self) -> str | None:
+        """
+        Check if there are follow-up messages to process.
+        Returns the next follow-up message if available.
+        """
+        if self.followup_queue:
+            return self.followup_queue.pop(0)
+        return None
 
     async def _notify_observers(self, event: Event):
         """Notify all registered observers of an event"""
@@ -270,12 +316,31 @@ class MultiProviderRuntime:
 
         # Wrap in queue if enabled
         if self.queue_manager:
-
-            async def queued_execution():
-                async for event in self._run_turn_internal(session, message, tools, max_tokens, images, system_prompt):
-                    yield event
-
-            # This is a generator, need to handle differently
+            # Queue management: ensure only one turn per session, respect global limits
+            session_id = session.session_id if session else "default"
+            
+            # Check if queue is full (global limit)
+            global_stats = self.queue_manager.get_global_lane().get_stats()
+            max_queue_size = global_stats["max_concurrent"] * 2  # Allow some buffer
+            
+            if global_stats["queued"] + global_stats["active"] >= max_queue_size:
+                # Queue is full, emit error
+                error_event = AgentEvent(
+                    "error",
+                    {
+                        "message": "Queue is full. Please try again later.",
+                        "queue_size": global_stats["queued"],
+                        "active": global_stats["active"],
+                        "max_size": max_queue_size
+                    }
+                )
+                yield error_event
+                return
+            
+            # Execute with queue management
+            # Note: generators can't be wrapped directly in enqueue_both,
+            # so we track execution but don't enforce hard queuing for streaming
+            logger.info(f"Executing turn with queue management for session {session_id}")
             async for event in self._run_turn_internal(session, message, tools, max_tokens, images, system_prompt):
                 yield event
         else:
@@ -370,12 +435,83 @@ class MultiProviderRuntime:
                     current_model = self.fallback_manager.get_current_model()
                     logger.info(f"Using model: {current_model}")
 
+                # Smart image loading: Only load images explicitly referenced in prompts
+                # Based on openclaw TypeScript: src/agents/pi-embedded-runner/run/images.ts
+                from openclaw.agents.image_loader import smart_load_images
+                
+                # Apply smart image loading if images are provided
+                images_to_use = None
+                if images:
+                    # Convert session messages to dict format for image loader
+                    history_messages = [
+                        {"role": msg.role, "content": msg.content, "images": msg.images}
+                        for msg in session.messages
+                    ] if session else []
+                    
+                    image_data = smart_load_images(
+                        current_prompt=prompt,
+                        history_messages=history_messages,
+                        existing_images=images
+                    )
+                    images_to_use = image_data["current_images"]
+                    
+                    if image_data["loaded_count"] > 0 or image_data["skipped_count"] > 0:
+                        logger.info(
+                            f"Smart image loading: {image_data['loaded_count']} loaded, "
+                            f"{image_data['skipped_count']} skipped"
+                        )
+                
                 # Convert session messages to LLM format
+                # CRITICAL: Only attach images to the LAST message (current turn)
+                # IMPORTANT: Limit history to prevent context overflow
+                MAX_HISTORY_MESSAGES = 20  # Keep last 20 messages (10 turns)
+                
+                all_messages = session.get_messages()
+                
+                # If too many messages, keep system message + recent history
+                if len(all_messages) > MAX_HISTORY_MESSAGES:
+                    # Separate system messages from conversation
+                    system_msgs = [m for m in all_messages if m.role == "system"]
+                    conversation_msgs = [m for m in all_messages if m.role != "system"]
+                    
+                    # Keep only recent conversation
+                    recent_conversation = conversation_msgs[-MAX_HISTORY_MESSAGES:]
+                    messages_to_send = system_msgs + recent_conversation
+                    
+                    logger.warning(
+                        f"⚠️ Context too long! Truncating from {len(all_messages)} to {len(messages_to_send)} messages "
+                        f"(keeping {len(system_msgs)} system + {len(recent_conversation)} recent)"
+                    )
+                else:
+                    messages_to_send = all_messages
+                
                 llm_messages = []
-                for msg in session.get_messages():
-                    # Include images if present
-                    msg_images = getattr(msg, 'images', None)
+                for i, msg in enumerate(messages_to_send):
+                    msg_images = None
+                    
+                    # ONLY attach images to the LAST message (current turn)
+                    if i == len(messages_to_send) - 1 and images_to_use:
+                        msg_images = images_to_use
+                    
+                    # Historical messages: no images
                     llm_messages.append(LLMMessage(role=msg.role, content=msg.content, images=msg_images))
+                
+                # DEBUG: Log message count and content
+                logger.info(f"📝 Sending {len(llm_messages)} message(s) to provider")
+                if len(llm_messages) <= 5:
+                    # Log all messages if few
+                    for idx, llm_msg in enumerate(llm_messages):
+                        content_preview = llm_msg.content[:50] if llm_msg.content and len(llm_msg.content) > 50 else llm_msg.content
+                        logger.info(f"  [{idx}] {llm_msg.role}: {repr(content_preview)}{'...' if llm_msg.content and len(llm_msg.content) > 50 else ''}")
+                else:
+                    # Log first and last few if many
+                    for idx in [0, 1, len(llm_messages)-2, len(llm_messages)-1]:
+                        if 0 <= idx < len(llm_messages):
+                            llm_msg = llm_messages[idx]
+                            content_preview = llm_msg.content[:50] if llm_msg.content and len(llm_msg.content) > 50 else llm_msg.content
+                            logger.info(f"  [{idx}] {llm_msg.role}: {repr(content_preview)}{'...' if llm_msg.content and len(llm_msg.content) > 50 else ''}")
+                    if len(llm_messages) > 4:
+                        logger.info(f"  ... ({len(llm_messages) - 4} more messages) ...")
 
                 # Format tools for provider
                 tools_param = None
@@ -490,6 +626,41 @@ class MultiProviderRuntime:
                                     )
                                     await self._notify_observers(event)
                                     yield event
+
+                                    # Check if tool generated a file (e.g., PPT, PDF, image)
+                                    # Try to parse output as JSON if it looks like file info
+                                    file_info = None
+                                    if success and isinstance(output, str):
+                                        try:
+                                            import json
+                                            parsed = json.loads(output)
+                                            if isinstance(parsed, dict) and "file_path" in parsed:
+                                                file_info = parsed
+                                        except (json.JSONDecodeError, ValueError):
+                                            pass
+                                    elif success and isinstance(output, dict) and "file_path" in output:
+                                        file_info = output
+                                    
+                                    if file_info:
+                                        from pathlib import Path
+                                        file_path = file_info["file_path"]
+                                        
+                                        if Path(file_path).exists():
+                                            # Emit file generated event
+                                            file_event = Event(
+                                                type=EventType.AGENT_FILE_GENERATED,
+                                                source="agent-runtime",
+                                                session_id=session.session_id if session else None,
+                                                data={
+                                                    "file_path": file_path,
+                                                    "file_type": file_info.get("file_type", "document"),
+                                                    "file_name": Path(file_path).name,
+                                                    "caption": file_info.get("caption", Path(file_path).stem),
+                                                },
+                                            )
+                                            await self._notify_observers(file_event)
+                                            yield file_event
+                                            logger.info(f"📎 File generated and event emitted: {Path(file_path).name}")
 
                                     # Add tool result to session
                                     session.add_tool_message(
@@ -622,6 +793,17 @@ class MultiProviderRuntime:
                 await self._notify_observers(event)
                 yield event
                 return
+
+            except asyncio.CancelledError:
+                # Handle abort/cancellation
+                logger.info("Agent turn was cancelled/aborted")
+                event = AgentEvent(
+                    "turn_aborted",
+                    {"reason": "Cancelled by user or system"}
+                )
+                await self._notify_observers(event)
+                yield event
+                raise  # Re-raise to properly propagate cancellation
 
             except Exception as e:
                 # Check if should failover

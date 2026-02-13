@@ -1,3 +1,1 @@
-"""
-ClawdBot Python Test Suite
-"""
+"""Tests for openclaw-python"""

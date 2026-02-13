@@ -2,7 +2,14 @@
 DateTime helper functions for timezone-aware operations
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+import sys
+
+# Python 3.9 compatibility: UTC is only available in Python 3.11+
+if sys.version_info >= (3, 11):
+    from datetime import UTC
+else:
+    UTC = timezone.utc
 
 
 def utcnow() -> datetime:

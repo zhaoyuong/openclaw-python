@@ -1,0 +1,173 @@
+{
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "loading": "Loading...",
+    "unknown": "Unknown"
+  },
+  "commands": {
+    "start": {
+      "name": "start",
+      "description": "🚀 Start using the bot",
+      "welcome": "👋 **Welcome to OpenClaw AI Assistant!**\n\n🤖 I'm your AI assistant powered by advanced language models.\n\n**🎯 What I can do:**\n• Answer questions and have conversations\n• Execute commands and run code\n• Help with tasks and problem-solving\n• Provide information and explanations\n\n**📚 Quick Start:**\n• Use `/help` to see all available commands\n• Use `/model` to switch AI models\n• Use `/new` to start a fresh conversation\n• Use `/status` to check system status\n\n**💡 Tips:**\n• I remember our conversation context\n• You can send me text, images, and files\n• Use `/lang` to change language\n\n**🌟 Let's get started! How can I help you today?**"
+    },
+    "help": {
+      "name": "help",
+      "description": "📋 Show help information",
+      "title": "📚 **OpenClaw AI Assistant - Available Commands**",
+      "categories": {
+        "core": "**🎯 Core Commands:**",
+        "session": "**💬 Session Management:**",
+        "options": "**⚙️ Options & Settings:**",
+        "management": "**🔧 Management:**",
+        "tools": "**🛠️ Tools:**"
+      },
+      "footer": "\n💡 **Tip:** Use `/commands` for a complete paginated list.\n🌐 **Language:** Use `/lang` to switch language."
+    },
+    "new": {
+      "name": "new",
+      "description": "🆕 Start a new conversation",
+      "confirm_title": "🔄 Start New Conversation?",
+      "confirm_message": "This will clear the current conversation history and start fresh.\n\n⚠️ Current context will be lost.",
+      "confirm_button": "✅ Confirm",
+      "cancel_button": "❌ Cancel",
+      "success": "✨ New conversation started!",
+      "cancelled": "Cancelled."
+    },
+    "status": {
+      "name": "status",
+      "description": "📊 Check bot status",
+      "title": "📊 **Bot Status**",
+      "model": "🤖 Current Model:",
+      "state": "✅ Status:",
+      "running": "Running",
+      "uptime": "⏱️ Uptime:",
+      "memory": "💾 Memory:",
+      "session": "💬 Session:",
+      "active": "Active"
+    },
+    "model": {
+      "name": "model",
+      "description": "🤖 Switch AI model",
+      "title": "🤖 **Select AI Model**",
+      "current": "Current:",
+      "available": "Available models:",
+      "switched": "✅ Model switched to: `{model}`",
+      "invalid": "❌ Invalid model selection"
+    },
+    "config": {
+      "name": "config",
+      "description": "⚙️ Show or update configuration",
+      "title": "⚙️ **Current Configuration**",
+      "updated": "✅ Configuration updated",
+      "invalid": "❌ Invalid configuration"
+    },
+    "history": {
+      "name": "history",
+      "description": "📜 Show conversation history",
+      "title": "📜 **Conversation History**",
+      "empty": "No history available",
+      "messages": "{count} messages"
+    },
+    "think": {
+      "name": "think",
+      "description": "🧠 Enable extended thinking mode",
+      "enabled": "✅ Extended thinking mode enabled",
+      "disabled": "❌ Extended thinking mode disabled",
+      "level": "🧠 Thinking level: {level}"
+    },
+    "verbose": {
+      "name": "verbose",
+      "description": "🔊 Toggle verbose mode",
+      "enabled": "✅ Verbose mode enabled",
+      "disabled": "❌ Verbose mode disabled"
+    },
+    "reasoning": {
+      "name": "reasoning",
+      "description": "🤔 Toggle reasoning visibility",
+      "enabled": "✅ Reasoning mode enabled",
+      "disabled": "❌ Reasoning mode disabled",
+      "stream": "🌊 Reasoning streaming enabled"
+    },
+    "usage": {
+      "name": "usage",
+      "description": "📈 Show usage statistics",
+      "title": "📈 **Usage Statistics**",
+      "tokens": "🎫 Tokens used:",
+      "cost": "💰 Estimated cost:",
+      "mode_set": "✅ Usage display mode: {mode}"
+    },
+    "lang": {
+      "name": "lang",
+      "description": "🌐 Change language",
+      "title": "🌐 **Select Language**",
+      "current": "Current language:",
+      "available": "Available languages:",
+      "switched": "✅ Language changed to: {language}",
+      "invalid": "❌ Invalid language selection"
+    },
+    "debug": {
+      "name": "debug",
+      "description": "🐛 Toggle debug mode (admin only)",
+      "enabled": "✅ Debug mode enabled",
+      "disabled": "❌ Debug mode disabled",
+      "no_permission": "❌ You don't have permission to use this command"
+    },
+    "commands": {
+      "name": "commands",
+      "description": "📋 List all commands (paginated)",
+      "title": "📋 **Available Commands** (Page {page}/{total})",
+      "navigation": "Use the buttons below to navigate",
+      "prev": "⬅️ Previous",
+      "next": "➡️ Next"
+    },
+    "context": {
+      "name": "context",
+      "description": "📝 Explain how context is built",
+      "title": "📝 **Context Management**",
+      "explanation": "**How Context Works:**\n\n🔹 **Conversation Memory:** I remember our entire conversation within a session.\n\n🔹 **Message Context:** Each message includes:\n  • Your message text\n  • Previous conversation history\n  • Current settings and preferences\n  • Available tools and capabilities\n\n🔹 **Context Window:** Limited by model capacity (typically 128k-200k tokens).\n\n🔹 **Compaction:** Old messages are archived when context is full.\n\n**💡 Tips:**\n• Use `/new` to start fresh\n• Use `/compact` to optimize context\n• Important info is preserved across sessions"
+    },
+    "compact": {
+      "name": "compact",
+      "description": "🗜️ Compact session context",
+      "started": "🗜️ Compacting session...",
+      "success": "✅ Session compacted successfully\n📊 Saved {tokens} tokens",
+      "failed": "❌ Compaction failed: {error}"
+    },
+    "stop": {
+      "name": "stop",
+      "description": "🛑 Stop current run",
+      "success": "✅ Current run stopped",
+      "no_active": "ℹ️ No active run to stop"
+    }
+  },
+  "errors": {
+    "unknown": "❌ An unknown error occurred",
+    "network": "❌ Network error: {message}",
+    "timeout": "⏱️ Request timed out",
+    "unauthorized": "🔒 Unauthorized access",
+    "rate_limit": "⏳ Rate limit exceeded. Please try again later.",
+    "invalid_input": "❌ Invalid input: {message}",
+    "command_failed": "❌ Command failed: {message}",
+    "no_permission": "🔒 You don't have permission to perform this action"
+  },
+  "messages": {
+    "typing": "💭 Thinking...",
+    "processing": "⚙️ Processing your request...",
+    "generating": "✨ Generating response...",
+    "executing": "🔄 Executing command...",
+    "completed": "✅ Completed",
+    "cancelled": "❌ Cancelled"
+  },
+  "keyboards": {
+    "back": "🔙 Back",
+    "close": "❌ Close",
+    "refresh": "🔄 Refresh",
+    "settings": "⚙️ Settings"
+  }
+}

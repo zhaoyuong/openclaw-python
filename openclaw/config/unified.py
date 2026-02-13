@@ -21,9 +21,11 @@ Usage:
     # Programmatic
     config = OpenClawConfig(
         agent=AgentConfig(model="anthropic/claude-sonnet-4"),
-        gateway=GatewayConfig(port=8765)
+        gateway=GatewayConfig(port=18789)
     )
 """
+from __future__ import annotations
+
 
 import json
 import os
@@ -263,7 +265,7 @@ class OpenClawConfig(BaseModel):
                 model="anthropic/claude-sonnet-4"
             ),
             gateway=GatewayConfig(
-                port=8765,
+                port=18789,
                 auto_start_channels=True
             ),
             channels=ChannelsConfig(
@@ -335,7 +337,7 @@ class OpenClawConfig(BaseModel):
 
         Environment variable format:
             OPENCLAW_AGENT__MODEL=anthropic/claude-sonnet-4
-            OPENCLAW_GATEWAY__PORT=8765
+            OPENCLAW_GATEWAY__PORT=18789
             OPENCLAW_CHANNELS__TELEGRAM__ENABLED=true
 
         Args:
@@ -435,7 +437,7 @@ class ConfigBuilder:
     Example:
         config = (ConfigBuilder()
             .with_agent(model="anthropic/claude-sonnet-4")
-            .with_gateway(port=8765)
+            .with_gateway(port=18789)
             .with_channel("telegram", enabled=True, config={"bot_token": "..."})
             .build())
     """

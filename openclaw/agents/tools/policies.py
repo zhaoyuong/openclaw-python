@@ -1,6 +1,8 @@
 """
 Enhanced tool execution policies and access control
 """
+from __future__ import annotations
+
 
 import logging
 from collections.abc import Callable

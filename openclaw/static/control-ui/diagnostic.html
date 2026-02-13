@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Diagnostic</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1d25;
+            color: #e4e4e7;
+            padding: 40px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { color: #ff5c5c; margin-bottom: 30px; }
+        .section { 
+            background: #181b22; 
+            border: 1px solid #27272a;
+            border-radius: 12px; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+        }
+        .status { padding: 12px; margin: 10px 0; border-radius: 8px; }
+        .ok { background: rgba(34, 197, 94, 0.15); border-left: 4px solid #22c55e; }
+        .error { background: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; }
+        .pending { background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; }
+        code { 
+            background: rgba(0,0,0,0.3); 
+            padding: 2px 6px; 
+            border-radius: 4px; 
+            font-family: monospace;
+        }
+        pre {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        button {
+            background: #ff5c5c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin: 10px 10px 0 0;
+        }
+        button:hover { background: #ff7070; }
+        .result { margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <h1>🦞 OpenClaw 前端诊断</h1>
+    
+    <div class="section">
+        <h3>1. 基础连接测试</h3>
+        <div id="http-test" class="status pending">⏳ 测试HTTP服务器...</div>
+        <div id="ws-test" class="status pending">⏳ 测试WebSocket连接...</div>
+    </div>
+    
+    <div class="section">
+        <h3>2. 静态资源检查</h3>
+        <div id="js-test" class="status pending">⏳ 检查JavaScript文件...</div>
+        <div id="css-test" class="status pending">⏳ 检查CSS文件...</div>
+    </div>
+    
+    <div class="section">
+        <h3>3. Web Component检查</h3>
+        <div id="component-test" class="status pending">⏳ 检查 &lt;openclaw-app&gt; 元素...</div>
+    </div>
+    
+    <div class="section">
+        <h3>4. 配置信息</h3>
+        <div id="config-test" class="status pending">⏳ 检查配置注入...</div>
+        <div class="result">
+            <pre id="config-data">等待中...</pre>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>5. Gateway状态</h3>
+        <button onclick="testGateway()">刷新Gateway状态</button>
+        <div class="result">
+            <pre id="gateway-data">点击按钮测试...</pre>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>6. 浏览器信息</h3>
+        <pre id="browser-info"></pre>
+    </div>
+    
+    <script>
+        // 测试1: HTTP服务器
+        fetch('/health')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('http-test').className = 'status ok';
+                document.getElementById('http-test').textContent = '✅ HTTP服务器正常: ' + JSON.stringify(data);
+            })
+            .catch(e => {
+                document.getElementById('http-test').className = 'status error';
+                document.getElementById('http-test').textContent = '❌ HTTP测试失败: ' + e;
+            });
+        
+        // 测试2: WebSocket
+        const wsUrl = 'ws://127.0.0.1:18789';
+        const ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+            document.getElementById('ws-test').className = 'status ok';
+            document.getElementById('ws-test').textContent = '✅ WebSocket连接成功: ' + wsUrl;
+            ws.close();
+        };
+        ws.onerror = (e) => {
+            document.getElementById('ws-test').className = 'status error';
+            document.getElementById('ws-test').textContent = '❌ WebSocket连接失败: ' + wsUrl;
+        };
+        
+        // 测试3: JavaScript文件
+        fetch('/assets/index-C_TY5Tiw.js', { method: 'HEAD' })
+            .then(r => {
+                if (r.ok) {
+                    document.getElementById('js-test').className = 'status ok';
+                    document.getElementById('js-test').textContent = 
+                        `✅ JavaScript文件可访问 (${(r.headers.get('content-length')/1024).toFixed(1)}KB, ${r.headers.get('content-type')})`;
+                } else {
+                    throw new Error(`HTTP ${r.status}`);
+                }
+            })
+            .catch(e => {
+                document.getElementById('js-test').className = 'status error';
+                document.getElementById('js-test').textContent = '❌ JavaScript文件加载失败: ' + e;
+            });
+        
+        // 测试4: CSS文件
+        fetch('/assets/index-B_pAAEiP.css', { method: 'HEAD' })
+            .then(r => {
+                if (r.ok) {
+                    document.getElementById('css-test').className = 'status ok';
+                    document.getElementById('css-test').textContent = 
+                        `✅ CSS文件可访问 (${(r.headers.get('content-length')/1024).toFixed(1)}KB)`;
+                } else {
+                    throw new Error(`HTTP ${r.status}`);
+                }
+            })
+            .catch(e => {
+                document.getElementById('css-test').className = 'status error';
+                document.getElementById('css-test').textContent = '❌ CSS文件加载失败: ' + e;
+            });
+        
+        // 测试5: Web Component
+        setTimeout(() => {
+            const element = document.querySelector('openclaw-app');
+            if (element) {
+                document.getElementById('component-test').className = 'status ok';
+                document.getElementById('component-test').textContent = 
+                    `✅ Web Component存在 (shadowRoot: ${!!element.shadowRoot})`;
+            } else {
+                document.getElementById('component-test').className = 'status error';
+                document.getElementById('component-test').textContent = 
+                    '❌ 未找到 <openclaw-app> 元素（在主页面中）';
+            }
+        }, 1000);
+        
+        // 测试6: 配置
+        if (window.__OPENCLAW_CONFIG__) {
+            document.getElementById('config-test').className = 'status ok';
+            document.getElementById('config-test').textContent = '✅ 配置已注入';
+            document.getElementById('config-data').textContent = JSON.stringify(window.__OPENCLAW_CONFIG__, null, 2);
+        } else {
+            document.getElementById('config-test').className = 'status error';
+            document.getElementById('config-test').textContent = '❌ 配置未注入';
+            document.getElementById('config-data').textContent = '未找到 window.__OPENCLAW_CONFIG__';
+        }
+        
+        // 浏览器信息
+        document.getElementById('browser-info').textContent = 
+            `User Agent: ${navigator.userAgent}\n` +
+            `Platform: ${navigator.platform}\n` +
+            `Language: ${navigator.language}\n` +
+            `Online: ${navigator.onLine}\n` +
+            `Cookies Enabled: ${navigator.cookieEnabled}`;
+        
+        // Gateway测试
+        async function testGateway() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '测试中...';
+            
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                document.getElementById('gateway-data').textContent = JSON.stringify(data, null, 2);
+                btn.textContent = '✅ 测试成功';
+            } catch (e) {
+                document.getElementById('gateway-data').textContent = '错误: ' + e;
+                btn.textContent = '❌ 测试失败';
+            } finally {
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = '刷新Gateway状态';
+                }, 2000);
+            }
+        }
+    </script>
+</body>
+</html>

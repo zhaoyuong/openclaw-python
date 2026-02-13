@@ -1,6 +1,8 @@
 """
 FastAPI REST API server for ClawdBot
 """
+from __future__ import annotations
+
 
 import logging
 from contextlib import asynccontextmanager

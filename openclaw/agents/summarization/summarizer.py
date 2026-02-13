@@ -1,6 +1,8 @@
 """
 LLM-driven message summarization for context compaction
 """
+from __future__ import annotations
+
 
 import logging
 from enum import Enum

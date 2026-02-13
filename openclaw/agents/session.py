@@ -1,6 +1,8 @@
 """
 Session management for agent conversations
 """
+from __future__ import annotations
+
 
 import json
 import logging

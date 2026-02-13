@@ -1,6 +1,8 @@
 """
 Enhanced WebSocket streaming for real-time agent communication
 """
+from __future__ import annotations
+
 
 import asyncio
 import json

@@ -1,6 +1,8 @@
 """
 Queue manager for session and global lanes
 """
+from __future__ import annotations
+
 
 import hashlib
 import logging

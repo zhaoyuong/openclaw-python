@@ -1,6 +1,8 @@
 """
 Metrics collection for ClawdBot
 """
+from __future__ import annotations
+
 
 import logging
 import threading

@@ -1,6 +1,8 @@
 """
 Workspace settings manager for per-project configuration
 """
+from __future__ import annotations
+
 
 import json
 import logging

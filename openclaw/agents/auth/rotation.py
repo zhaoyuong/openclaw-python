@@ -2,9 +2,18 @@
 Auth profile rotation with cooldown management
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timezone, timedelta
+import sys
+
+# Python 3.9 compatibility
+if sys.version_info >= (3, 11):
+    from datetime import UTC
+else:
+    UTC = timezone.utc
 
 from .profile import AuthProfile, ProfileStore
 

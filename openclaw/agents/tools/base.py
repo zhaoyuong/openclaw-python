@@ -1,4 +1,6 @@
 """Base tool interface with enhanced features"""
+from __future__ import annotations
+
 
 import asyncio
 import logging
@@ -6,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
@@ -175,6 +177,29 @@ class AgentTool(ABC):
         timeout/permission/rate-limit features. Otherwise, override execute() directly.
         """
         raise NotImplementedError("Subclass must implement either _execute_impl or execute")
+    
+    async def execute_with_progress(
+        self,
+        params: dict[str, Any],
+        progress_callback: Callable[..., Any] | None = None
+    ) -> ToolResult:
+        """
+        Execute tool with progress reporting support
+        
+        Args:
+            params: Tool parameters
+            progress_callback: Optional async callback(current, total, message)
+            
+        Returns:
+            Tool execution result
+        """
+        # Store progress callback for use by tool implementation
+        self._progress_callback = progress_callback
+        
+        try:
+            return await self.execute(params)
+        finally:
+            self._progress_callback = None
 
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         """

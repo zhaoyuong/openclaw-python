@@ -25,6 +25,8 @@ Usage:
     # Use in ChannelManager
     channel_manager.set_runtime_env("telegram", env)
 """
+from __future__ import annotations
+
 
 import logging
 from collections.abc import AsyncIterator

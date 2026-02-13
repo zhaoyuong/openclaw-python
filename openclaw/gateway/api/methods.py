@@ -3,6 +3,8 @@ Gateway API Method Implementations
 
 Core methods for Gateway WebSocket API.
 """
+from __future__ import annotations
+
 
 import logging
 from typing import Any

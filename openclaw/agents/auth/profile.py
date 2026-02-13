@@ -5,9 +5,16 @@ Auth profile data structures
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+import sys
+
+# Python 3.9 compatibility
+if sys.version_info >= (3, 11):
+    from datetime import UTC
+else:
+    UTC = timezone.utc
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 
 @dataclass
@@ -28,10 +35,10 @@ class AuthProfile:
     id: str
     provider: str
     api_key: str
-    last_used: datetime | None = None
+    last_used: Optional[datetime] = None
     failure_count: int = 0
-    cooldown_until: datetime | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    cooldown_until: Optional[datetime] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def is_available(self) -> bool:
         """Check if profile is available (not in cooldown)"""
@@ -85,7 +92,7 @@ class ProfileStore:
     Store and manage authentication profiles
     """
 
-    def __init__(self, config_dir: Path | None = None):
+    def __init__(self, config_dir: Optional[Path] = None):
         """
         Initialize profile store
 
@@ -96,7 +103,7 @@ class ProfileStore:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.config_file = self.config_dir / "auth_profiles.json"
 
-        self.profiles: dict[str, AuthProfile] = {}
+        self.profiles: Dict[str, AuthProfile] = {}
         self._load()
 
     def add_profile(self, profile: AuthProfile) -> None:
@@ -104,11 +111,11 @@ class ProfileStore:
         self.profiles[profile.id] = profile
         self._save()
 
-    def get_profile(self, profile_id: str) -> AuthProfile | None:
+    def get_profile(self, profile_id: str) -> Optional[AuthProfile]:
         """Get profile by ID"""
         return self.profiles.get(profile_id)
 
-    def list_profiles(self, provider: str | None = None) -> list[AuthProfile]:
+    def list_profiles(self, provider: Optional[str] = None) -> List[AuthProfile]:
         """
         List profiles, optionally filtered by provider
 

@@ -96,8 +96,13 @@ workspace/
 
 # Documentation
 # All docs/ content is for local development only
-# GitHub should only show README.md, QUICK_START.md, START_HERE.md
+# Only README.md, CHANGELOG.md, CONTRIBUTING.md should be in version control
 docs/
+*.md
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!CONTRIBUTORS.md
 
 # Temporary analysis and implementation reports (keep locally, don't push)
 *_ANALYSIS.md
@@ -130,3 +135,5 @@ SSH_SETUP_GUIDE.md
 random_image.jpg
 *.jpg
 *.png
+control-ui/node_modules/
+src/

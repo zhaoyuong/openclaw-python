@@ -4,6 +4,8 @@ OpenAI-compatible API endpoints
 This module provides OpenAI-compatible API endpoints for ClawdBot,
 allowing it to be used as a drop-in replacement for OpenAI in many applications.
 """
+from __future__ import annotations
+
 
 import logging
 import time

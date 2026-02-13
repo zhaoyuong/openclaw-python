@@ -3,6 +3,8 @@ Gateway Method Registry
 
 Provides a centralized registry for all Gateway WebSocket API methods.
 """
+from __future__ import annotations
+
 
 import logging
 from typing import Any, Protocol
@@ -250,11 +252,30 @@ def _register_core_methods(registry: MethodRegistry):
         HealthMethod,
         PingMethod,
     )
+    from .sessions_methods import (
+        SessionsListMethod,
+        SessionsPreviewMethod,
+        SessionsResolveMethod,
+        SessionsPatchMethod,
+        SessionsResetMethod,
+        SessionsDeleteMethod,
+        SessionsCompactMethod,
+    )
 
+    # Core methods
     registry.register(ConnectMethod())
     registry.register(PingMethod())
     registry.register(HealthMethod())
     registry.register(AgentMethod())
     registry.register(ChannelsListMethod())
+    
+    # Session methods
+    registry.register(SessionsListMethod())
+    registry.register(SessionsPreviewMethod())
+    registry.register(SessionsResolveMethod())
+    registry.register(SessionsPatchMethod())
+    registry.register(SessionsResetMethod())
+    registry.register(SessionsDeleteMethod())
+    registry.register(SessionsCompactMethod())
 
     logger.info(f"Registered {registry.get_method_count()} core methods")

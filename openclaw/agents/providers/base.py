@@ -1,6 +1,8 @@
 """
 Base LLM Provider interface
 """
+from __future__ import annotations
+
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -15,6 +17,8 @@ class LLMMessage:
     role: str
     content: Any
     images: list[str] | None = None  # List of image URLs or file paths
+    tool_calls: list[dict] | None = None  # Tool calls (for assistant messages)
+    tool_call_id: str | None = None  # Tool call ID (for toolResult messages)
 
 
 @dataclass
