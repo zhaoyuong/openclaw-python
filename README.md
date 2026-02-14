@@ -1,4 +1,4 @@
-# OpenXJarvis 🦞
+# OpenXJarvis （openclaw-python🦞）
 
 > **OpenClaw is great, but I also need Python! J.A.R.V.I.S is coming.**  
 > _A full-featured Python implementation of the OpenClaw AI assistant platform_
